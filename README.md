@@ -13,7 +13,11 @@ Application Android de budget familial (Flutter). Voir `CLAUDE.md` pour le cahie
 - Réglages : prénom, thème (comme le téléphone, jour, nuit), noms et soldes de départ des portefeuilles.
 - Données enregistrées sur le téléphone (fichier JSON). Firebase viendra ensuite.
 
-Étapes suivantes : 2. vision claire des revenus · 3. suivi de l'épargne · 4. statistiques et projections.
+**Étape 2 : vision claire des revenus** (faite, version 0.2.0)
+- Accueil : carte « Revenus du mois » avec le total, l'écart avec le mois précédent, la répartition par source et la part déjà dépensée (ou le dépassement).
+- Onglet Rapports, « Bilan du mois » : revenus, dépenses et reste ; revenus par source comparés au mois précédent ; revenus et dépenses sur 6 mois (toucher un mois pour l'afficher) ; dépenses par catégorie ; détail des revenus.
+
+Étapes suivantes : 3. suivi de l'épargne · 4. statistiques et projections.
 
 ## Développement
 

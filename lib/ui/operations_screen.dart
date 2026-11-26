@@ -5,6 +5,7 @@ import '../models/operation.dart';
 import '../state/budget_store.dart';
 import '../theme.dart';
 import 'home_shell.dart';
+import 'widgets/charts.dart';
 import 'widgets/common.dart';
 
 /// Opérations d'un mois, regroupées par jour. Toucher pour modifier,
@@ -25,7 +26,6 @@ class _OperationsScreenState extends State<OperationsScreen> {
     final mif = context.mif;
     final now = store.now();
     final month = _month ?? DateTime(now.year, now.month);
-    final isCurrentMonth = month.year == now.year && month.month == now.month;
     final ops = store.operationsInMonth(month);
     final summary = store.monthSummary(month);
 
@@ -39,38 +39,10 @@ class _OperationsScreenState extends State<OperationsScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                tooltip: 'Mois précédent',
-                icon: const Icon(Icons.chevron_left),
-                onPressed: () => setState(
-                  () => _month = DateTime(month.year, month.month - 1),
-                ),
-              ),
-              SizedBox(
-                width: 170,
-                child: Text(
-                  monthLabel(month),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: mif.text,
-                  ),
-                ),
-              ),
-              IconButton(
-                tooltip: 'Mois suivant',
-                icon: const Icon(Icons.chevron_right),
-                onPressed: isCurrentMonth
-                    ? null
-                    : () => setState(
-                        () => _month = DateTime(month.year, month.month + 1),
-                      ),
-              ),
-            ],
+          MonthSwitcher(
+            month: month,
+            now: now,
+            onChanged: (m) => setState(() => _month = m),
           ),
           const SizedBox(height: 4),
           MifCard(

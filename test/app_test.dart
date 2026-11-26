@@ -165,4 +165,96 @@ void main() {
     expect(store.walletBalance(DefaultIds.walletMobileMoney), 5000);
     expect(store.totalBalance, 20000);
   });
+
+  testWidgets("l'accueil montre d'où viennent les revenus du mois", (
+    tester,
+  ) async {
+    final store = await pumpApp(tester);
+    expect(find.text('Aucun revenu saisi en novembre.'), findsOneWidget);
+
+    Future<void> income(int a, String cat, DateTime d) => store.addOperation(
+      type: OperationType.income,
+      amount: a,
+      date: d,
+      categoryId: cat,
+      targetWalletId: DefaultIds.walletBank,
+    );
+    await income(600000, 'cat-salaires', DateTime(2026, 10, 25));
+    await income(600000, 'cat-salaires', DateTime(2026, 11, 25));
+    await income(50000, 'cat-activites-annexes', DateTime(2026, 11, 20));
+    await store.addOperation(
+      type: OperationType.expense,
+      amount: 162500,
+      date: clock,
+      categoryId: 'cat-logement-loyer',
+      sourceWalletId: DefaultIds.walletCash,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Revenus de novembre'), findsOneWidget);
+    expect(find.text('650${nbsp}000${nbsp}FCFA'), findsOneWidget);
+    expect(find.text('+50${nbsp}000 par rapport à octobre'), findsOneWidget);
+    expect(find.text('Salaires'), findsWidgets);
+    expect(find.text('92$nbsp%'), findsOneWidget);
+    expect(find.text('Activités annexes'), findsWidgets);
+    expect(
+      find.textContaining('soit 25$nbsp% des revenus', findRichText: true),
+      findsWidgets,
+    );
+
+    // Toucher la carte ouvre le bilan du mois.
+    await tester.tap(find.text('Revenus de novembre'));
+    await tester.pumpAndSettle();
+    expect(find.text('Bilan du mois'), findsOneWidget);
+    expect(find.text('Revenus par source'), findsOneWidget);
+    expect(find.text('+0 par rapport à octobre'), findsNothing);
+    expect(find.text('Comme en octobre'), findsOneWidget);
+    expect(find.text('Rien en octobre'), findsOneWidget);
+  });
+
+  testWidgets('« Saisir un revenu » ouvre la saisie sur Revenu', (
+    tester,
+  ) async {
+    final store = await pumpApp(tester);
+    await tester.tap(find.text('Saisir un revenu'));
+    await tester.pumpAndSettle();
+    await type(tester, ['5', '0', '000']);
+    expect(find.text('Choisir une catégorie'), findsOneWidget);
+    await tester.tap(find.text('Activités annexes'));
+    await tester.pump();
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(store.operations.single.type, OperationType.income);
+    expect(store.monthSummary(clock).income, 50000);
+  });
+
+  testWidgets('le bilan change de mois depuis le graphique des 6 mois', (
+    tester,
+  ) async {
+    final store = await pumpApp(tester);
+    await store.addOperation(
+      type: OperationType.income,
+      amount: 600000,
+      date: DateTime(2026, 9, 25),
+      categoryId: 'cat-salaires',
+      targetWalletId: DefaultIds.walletBank,
+    );
+    await tester.tap(find.text('Rapports'));
+    await tester.pumpAndSettle();
+    expect(find.text('Novembre 2026'), findsOneWidget);
+    expect(find.text('Aucun revenu en novembre.'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('sept.'),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('sept.'));
+    await tester.pumpAndSettle();
+    // Remonter en haut du bilan.
+    await tester.drag(find.byType(Scrollable).last, const Offset(0, 3000));
+    await tester.pumpAndSettle();
+    expect(find.text('Septembre 2026'), findsOneWidget);
+    expect(find.text('Rien en août'), findsOneWidget);
+  });
 }

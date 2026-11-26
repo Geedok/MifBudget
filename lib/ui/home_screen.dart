@@ -6,11 +6,17 @@ import '../theme.dart';
 import 'home_shell.dart';
 import 'settings_screen.dart';
 import 'widgets/common.dart';
+import 'widgets/income_card.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key, required this.onSeeAllOperations});
+  const HomeScreen({
+    super.key,
+    required this.onSeeAllOperations,
+    required this.onOpenReport,
+  });
 
   final VoidCallback onSeeAllOperations;
+  final VoidCallback onOpenReport;
 
   @override
   Widget build(BuildContext context) {
@@ -163,6 +169,8 @@ class HomeScreen extends StatelessWidget {
               ],
             ],
           ),
+          const SizedBox(height: 12),
+          IncomeCard(onOpenReport: onOpenReport),
           const SizedBox(height: 12),
           MifCard(
             padding: const EdgeInsets.symmetric(vertical: 12),

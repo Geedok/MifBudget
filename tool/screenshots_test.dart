@@ -148,7 +148,53 @@ void main() {
         src: DefaultIds.walletMobileMoney,
       );
 
+      await add(
+        OperationType.income,
+        45000,
+        6,
+        'cat-activites-annexes',
+        dst: DefaultIds.walletMobileMoney,
+      );
+      // Historique des mois précédents.
+      const history = [
+        (600000, 0, 540000),
+        (600000, 30000, 610000),
+        (600000, 0, 480000),
+        (650000, 60000, 590000),
+        (650000, 20000, 520000),
+      ];
+      for (final (i, (salary, side, spent)) in history.indexed) {
+        final d = DateTime(2026, 6 + i, 25);
+        final days = clock.difference(d).inDays;
+        await add(
+          OperationType.income,
+          salary,
+          days,
+          'cat-salaires',
+          dst: DefaultIds.walletBank,
+        );
+        if (side > 0) {
+          await add(
+            OperationType.income,
+            side,
+            days,
+            'cat-activites-annexes',
+            dst: DefaultIds.walletMobileMoney,
+          );
+        }
+        await add(
+          OperationType.expense,
+          spent,
+          days,
+          'cat-logement-loyer',
+          src: DefaultIds.walletBank,
+        );
+      }
+
       await shot(tester, '1-accueil-$suffix');
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -420));
+      await shot(tester, '1b-accueil-revenus-$suffix');
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, 420));
 
       await tester.tap(find.byTooltip('Ajouter une opération'));
       await tester.pumpAndSettle();
@@ -162,6 +208,11 @@ void main() {
 
       await tester.tap(find.text('Opérations').last);
       await shot(tester, '3-operations-$suffix');
+
+      await tester.tap(find.text('Rapports'));
+      await shot(tester, '4-bilan-$suffix');
+      await tester.drag(find.byType(Scrollable).last, const Offset(0, -520));
+      await shot(tester, '4b-bilan-6mois-$suffix');
     });
   }
 }

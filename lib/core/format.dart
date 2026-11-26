@@ -59,3 +59,23 @@ DateTime dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 /// Clé de mois AAAA-MM, utilisée aussi pour les budgets.
 String monthKey(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}';
+
+/// « octobre ».
+String monthName(DateTime month) => DateFormat('MMMM', 'fr_FR').format(month);
+
+/// « nov. » (abréviation française).
+String shortMonth(DateTime month) => DateFormat('MMM', 'fr_FR').format(month);
+
+/// Pourcentage arrondi : 0.287 → « 29 % ».
+String formatPercent(double ratio) => '${(ratio * 100).round()}$nbsp%';
+
+/// Écart avec le mois précédent : « +50 000 par rapport à octobre »,
+/// « −20 000 par rapport à octobre », « Comme en octobre » ; null s'il n'y a
+/// rien à comparer.
+String? deltaLabel(int current, int previous, DateTime previousMonth) {
+  if (previous == 0 && current == 0) return null;
+  if (previous == 0) return 'Rien en ${monthName(previousMonth)}';
+  final diff = current - previous;
+  if (diff == 0) return 'Comme en ${monthName(previousMonth)}';
+  return '${formatSigned(diff)} par rapport à ${monthName(previousMonth)}';
+}

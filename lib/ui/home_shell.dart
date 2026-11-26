@@ -7,15 +7,24 @@ import 'home_screen.dart';
 import 'operations_screen.dart';
 import 'placeholder_screen.dart';
 import 'quick_entry_screen.dart';
+import 'report_screen.dart';
 
 /// Ouvre la saisie (nouvelle ou modification) puis confirme par un message
 /// avec « Annuler ».
-Future<void> openEntry(BuildContext context, {Operation? existing}) async {
+Future<void> openEntry(
+  BuildContext context, {
+  Operation? existing,
+  OperationType initialType = OperationType.expense,
+}) async {
   final store = StoreScope.read(context);
   final messenger = ScaffoldMessenger.of(context);
   // Le message précédent masquerait le pavé numérique de la saisie.
   messenger.hideCurrentSnackBar();
-  final result = await QuickEntryScreen.open(context, existing: existing);
+  final result = await QuickEntryScreen.open(
+    context,
+    existing: existing,
+    initialType: initialType,
+  );
   if (result == null) return;
   final op = result.operation;
   final String message;
@@ -60,7 +69,10 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      HomeScreen(onSeeAllOperations: () => setState(() => _tab = 1)),
+      HomeScreen(
+        onSeeAllOperations: () => setState(() => _tab = 1),
+        onOpenReport: () => setState(() => _tab = 4),
+      ),
       const OperationsScreen(),
       const PlaceholderScreen(
         title: 'Budgets',
@@ -72,11 +84,7 @@ class _HomeShellState extends State<HomeShell> {
         icon: Icons.savings_outlined,
         message: "Le suivi de l'épargne de sûreté, de l'épargne de construction et de vos autres objectifs arrive à l'étape 3.",
       ),
-      const PlaceholderScreen(
-        title: 'Rapports',
-        icon: Icons.bar_chart,
-        message: "Les statistiques sur 12 mois et les projections arrivent à l'étape 4.",
-      ),
+      const ReportScreen(),
     ];
     return Scaffold(
       body: IndexedStack(index: _tab, children: pages),

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mifbudget/core/format.dart';
 import 'package:mifbudget/data/defaults.dart';
 import 'package:mifbudget/data/repository.dart';
 import 'package:mifbudget/models/category.dart';
@@ -192,5 +193,87 @@ void main() {
     expect(loaded.deleted, isFalse);
     expect(reopened.walletBalance(momo), 31500);
     expect(File('${file.path}.tmp').existsSync(), isFalse);
+  });
+
+  test('revenus du mois par source, avec détail par sous-catégorie', () async {
+    final store = await newStore();
+    Future<void> add(OperationType t, int a, String cat, {DateTime? date}) =>
+        store.addOperation(
+          type: t,
+          amount: a,
+          date: date ?? clock,
+          categoryId: cat,
+          sourceWalletId: t == OperationType.expense ? cash : null,
+          targetWalletId: t == OperationType.income ? bank : null,
+        );
+    await add(OperationType.income, 400000, 'cat-salaires');
+    await add(OperationType.income, 250000, 'cat-salaires');
+    await add(OperationType.income, 45000, 'cat-activites-annexes');
+    await add(
+      OperationType.income,
+      99000,
+      'cat-salaires',
+      date: DateTime(2026, 10, 28),
+    );
+    await add(OperationType.expense, 15000, 'cat-alimentation-marche');
+    await add(OperationType.expense, 5000, 'cat-alimentation');
+    await add(OperationType.expense, 30000, 'cat-transport');
+
+    final incomes = store.totalsByCategory(clock, CategoryKind.income);
+    expect(incomes.map((t) => (t.category!.name, t.amount, t.count)), [
+      ('Salaires', 650000, 2),
+      ('Activités annexes', 45000, 1),
+    ]);
+
+    final expenses = store.totalsByCategory(clock, CategoryKind.expense);
+    expect(expenses.map((t) => (t.category!.name, t.amount)), [
+      ('Transport', 30000),
+      ('Alimentation', 20000),
+    ]);
+    final food = expenses[1];
+    expect(food.subs.map((t) => (t.category!.name, t.amount)), [
+      ('Marché', 15000),
+      ('Alimentation', 5000),
+    ]);
+  });
+
+  test('résumé des 6 derniers mois, du plus ancien au plus récent', () async {
+    final store = await newStore();
+    await store.addOperation(
+      type: OperationType.income,
+      amount: 600000,
+      date: DateTime(2026, 9, 25),
+      categoryId: 'cat-salaires',
+      targetWalletId: bank,
+    );
+    await store.addOperation(
+      type: OperationType.expense,
+      amount: 12000,
+      date: DateTime(2026, 2, 1),
+      categoryId: 'cat-transport',
+      sourceWalletId: cash,
+    );
+
+    final months = store.recentMonths(DateTime(2026, 11));
+    expect(months.map((m) => monthKey(m.month!)), [
+      '2026-06',
+      '2026-07',
+      '2026-08',
+      '2026-09',
+      '2026-10',
+      '2026-11',
+    ]);
+    expect(months[3].income, 600000);
+    expect(months.fold(0, (s, m) => s + m.expense), 0);
+
+    // Passage d'année.
+    final early = store.recentMonths(DateTime(2026, 3), count: 3);
+    expect(early.map((m) => monthKey(m.month!)), [
+      '2026-01',
+      '2026-02',
+      '2026-03',
+    ]);
+    expect(early[1].expense, 12000);
+    expect(early[1].spentRatio, 0);
   });
 }

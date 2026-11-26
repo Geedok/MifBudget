@@ -25,18 +25,27 @@ class EntryResult {
 /// en tête), le portefeuille (le dernier utilisé est présélectionné), et
 /// enfin, si besoin, la date et une note.
 class QuickEntryScreen extends StatefulWidget {
-  const QuickEntryScreen({super.key, this.existing});
+  const QuickEntryScreen({
+    super.key,
+    this.existing,
+    this.initialType = OperationType.expense,
+  });
 
   /// Opération à modifier ; null pour une nouvelle saisie.
   final Operation? existing;
 
+  /// Type proposé pour une nouvelle saisie.
+  final OperationType initialType;
+
   static Future<EntryResult?> open(
     BuildContext context, {
     Operation? existing,
+    OperationType initialType = OperationType.expense,
   }) => Navigator.of(context).push<EntryResult>(
     MaterialPageRoute(
       fullscreenDialog: true,
-      builder: (_) => QuickEntryScreen(existing: existing),
+      builder: (_) =>
+          QuickEntryScreen(existing: existing, initialType: initialType),
     ),
   );
 
@@ -82,7 +91,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
             : e.sourceWalletId;
       }
     } else {
-      _type = OperationType.expense;
+      _type = widget.initialType;
       _date = dateOnly(store.now());
       _applyDefaultWallets(store);
     }

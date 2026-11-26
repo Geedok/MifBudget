@@ -10,10 +10,36 @@ import '../models/settings.dart';
 import '../models/wallet.dart';
 
 class MonthSummary {
-  const MonthSummary({required this.income, required this.expense});
+  const MonthSummary({required this.income, required this.expense, this.month});
+
+  /// Premier jour du mois concerné (si connu).
+  final DateTime? month;
   final int income;
   final int expense;
   int get balance => income - expense;
+
+  /// Part des revenus déjà dépensée (0 si aucun revenu).
+  double get spentRatio => income == 0 ? 0 : expense / income;
+}
+
+/// Total d'une catégorie principale sur un mois, avec le détail par
+/// sous-catégorie (l'argent saisi directement sur la catégorie principale
+/// apparaît sous son propre nom).
+class CategoryTotal {
+  const CategoryTotal({
+    required this.category,
+    required this.amount,
+    required this.count,
+    this.subs = const [],
+  });
+
+  /// Null pour les opérations sans catégorie connue.
+  final Category? category;
+  final int amount;
+
+  /// Nombre d'opérations.
+  final int count;
+  final List<CategoryTotal> subs;
 }
 
 /// État de l'application : charge les données, calcule soldes et totaux,
@@ -118,6 +144,52 @@ class BudgetStore extends ChangeNotifier {
       if (o.type == OperationType.expense) expense += o.amount;
     }
     return MonthSummary(income: income, expense: expense);
+  }
+
+  /// Résumés des [count] mois se terminant par [month], du plus ancien au
+  /// plus récent.
+  List<MonthSummary> recentMonths(DateTime month, {int count = 6}) => [
+    for (var i = count - 1; i >= 0; i--)
+      () {
+        final m = DateTime(month.year, month.month - i);
+        final s = monthSummary(m);
+        return MonthSummary(income: s.income, expense: s.expense, month: m);
+      }(),
+  ];
+
+  /// Revenus (ou dépenses) du mois regroupés par catégorie principale, du
+  /// plus gros au plus petit.
+  List<CategoryTotal> totalsByCategory(DateTime month, CategoryKind kind) {
+    final type = kind == CategoryKind.income
+        ? OperationType.income
+        : OperationType.expense;
+    final tops = <String?, Map<String?, (int, int)>>{};
+    for (final o in operationsInMonth(month)) {
+      if (o.type != type) continue;
+      final cat = category(o.categoryId);
+      final top = topCategory(o.categoryId);
+      final subs = tops.putIfAbsent(top?.id, () => {});
+      final key = cat?.id;
+      final prev = subs[key] ?? (0, 0);
+      subs[key] = (prev.$1 + o.amount, prev.$2 + 1);
+    }
+    final result = <CategoryTotal>[];
+    for (final MapEntry(key: topId, value: subs) in tops.entries) {
+      final subTotals = [
+        for (final MapEntry(key: id, value: (amount, count)) in subs.entries)
+          CategoryTotal(category: category(id), amount: amount, count: count),
+      ]..sort((a, b) => b.amount.compareTo(a.amount));
+      result.add(
+        CategoryTotal(
+          category: category(topId),
+          amount: subTotals.fold(0, (sum, t) => sum + t.amount),
+          count: subTotals.fold(0, (sum, t) => sum + t.count),
+          subs: subTotals,
+        ),
+      );
+    }
+    result.sort((a, b) => b.amount.compareTo(a.amount));
+    return result;
   }
 
   /// Catégories principales les plus utilisées ces 90 derniers jours (puis

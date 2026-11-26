@@ -14,6 +14,8 @@ class MifColors extends ThemeExtension<MifColors> {
     required this.track,
     required this.greenSoft,
     required this.income,
+    required this.chartIncome,
+    required this.chartExpense,
   });
 
   final Color green;
@@ -33,6 +35,11 @@ class MifColors extends ThemeExtension<MifColors> {
   /// Couleur des montants de revenus.
   final Color income;
 
+  /// Barres des graphiques revenus / dépenses (variantes de la charte
+  /// vérifiées pour le daltonisme et le contraste).
+  final Color chartIncome;
+  final Color chartExpense;
+
   static const light = MifColors(
     green: Color(0xFF1F6B4F),
     terracotta: Color(0xFFB4531A),
@@ -44,6 +51,8 @@ class MifColors extends ThemeExtension<MifColors> {
     track: Color(0xFFE6EAE6),
     greenSoft: Color(0xFFE8F2ED),
     income: Color(0xFF1F6B4F),
+    chartIncome: Color(0xFF14805A),
+    chartExpense: Color(0xFFB4531A),
   );
 
   static const dark = MifColors(
@@ -57,6 +66,8 @@ class MifColors extends ThemeExtension<MifColors> {
     track: Color(0xFF26302C),
     greenSoft: Color(0xFF1C3A2E),
     income: Color(0xFF5CC197),
+    chartIncome: Color(0xFF3FAE82),
+    chartExpense: Color(0xFFD9783E),
   );
 
   @override
@@ -77,6 +88,8 @@ class MifColors extends ThemeExtension<MifColors> {
       track: l(track, other.track),
       greenSoft: l(greenSoft, other.greenSoft),
       income: l(income, other.income),
+      chartIncome: l(chartIncome, other.chartIncome),
+      chartExpense: l(chartExpense, other.chartExpense),
     );
   }
 }

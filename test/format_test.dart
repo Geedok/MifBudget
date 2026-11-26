@@ -35,4 +35,21 @@ void main() {
     expect(monthLabel(DateTime(2026, 11)), 'Novembre 2026');
     expect(monthKey(DateTime(2026, 3, 9)), '2026-03');
   });
+
+  test('écarts et pourcentages', () {
+    final oct = DateTime(2026, 10);
+    expect(formatPercent(0.287), '29$nbsp%');
+    expect(deltaLabel(0, 0, oct), isNull);
+    expect(
+      deltaLabel(650000, 600000, oct),
+      '+50${nbsp}000 par rapport à octobre',
+    );
+    expect(
+      deltaLabel(580000, 600000, oct),
+      '−20${nbsp}000 par rapport à octobre',
+    );
+    expect(deltaLabel(600000, 600000, oct), 'Comme en octobre');
+    expect(deltaLabel(45000, 0, oct), 'Rien en octobre');
+    expect(shortMonth(DateTime(2026, 11)), 'nov.');
+  });
 }
