@@ -24,6 +24,14 @@ Ce qui compte le plus pour Eudokia, à garder en tête dans chaque choix :
 
 Les statistiques et les projets sont donc plus importants que l'ordre ci-dessous ne le laisse penser : ils viennent juste après le socle (opérations, catégories, épargnes).
 
+## Code (état au 26/11/2026)
+
+- Flutter 3.50 / Dart 3.14. Material s'importe depuis `package:material_ui/material_ui.dart` (`package:flutter/material.dart` est déprécié) ; les traductions françaises viennent de `GlobalMaterialLocalizations.delegates` de material_ui, pas de flutter_localizations.
+- `lib/models` (Portefeuille, Catégorie, Opération, Réglages ; noms de champs JSON en français, prêts pour Firestore) · `lib/data` (catégories par défaut, `BudgetRepository` avec stockage local JSON, à remplacer par Firestore) · `lib/state/budget_store.dart` (calculs : soldes, totaux du mois, catégories fréquentes) · `lib/ui` (écrans).
+- Montants formatés par `lib/core/format.dart` (espace insécable entre milliers).
+- Vérifier avant chaque commit : `flutter analyze` et `flutter test`. Captures jour/nuit : `tool/screenshots_test.dart`.
+- Étape 1 (saisie rapide, opérations, accueil, réglages) faite ; prochaines : revenus, épargnes, statistiques.
+
 ## Fonctionnalités V1 (ordre de priorité)
 
 Indispensable : opérations (revenu, dépense, transfert, versement/retrait d'épargne), catégories et sous-catégories, budgets mensuels, épargnes.

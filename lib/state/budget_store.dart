@@ -1,0 +1,310 @@
+import 'package:material_ui/material_ui.dart';
+import 'package:uuid/uuid.dart';
+
+import '../core/format.dart';
+import '../data/defaults.dart';
+import '../data/repository.dart';
+import '../models/category.dart';
+import '../models/operation.dart';
+import '../models/settings.dart';
+import '../models/wallet.dart';
+
+class MonthSummary {
+  const MonthSummary({required this.income, required this.expense});
+  final int income;
+  final int expense;
+  int get balance => income - expense;
+}
+
+/// État de l'application : charge les données, calcule soldes et totaux,
+/// et enregistre chaque changement dans le dépôt.
+class BudgetStore extends ChangeNotifier {
+  BudgetStore._(this._repo, this._data, this._clock);
+
+  static Future<BudgetStore> open(
+    BudgetRepository repo, {
+    DateTime Function()? clock,
+  }) async {
+    final data = await repo.load();
+    return BudgetStore._(repo, data, clock ?? DateTime.now);
+  }
+
+  final BudgetRepository _repo;
+  final BudgetData _data;
+  final DateTime Function() _clock;
+  static const _uuid = Uuid();
+
+  DateTime now() => _clock();
+
+  // ---------------------------------------------------------------- Lecture
+
+  AppSettings get settings => _data.settings;
+
+  List<Wallet> get wallets =>
+      _data.wallets.where((w) => !w.archived).toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+
+  Wallet? wallet(String? id) {
+    for (final w in _data.wallets) {
+      if (w.id == id) return w;
+    }
+    return null;
+  }
+
+  Category? category(String? id) {
+    for (final c in _data.categories) {
+      if (c.id == id) return c;
+    }
+    return null;
+  }
+
+  /// La catégorie principale (la parente d'une sous-catégorie).
+  Category? topCategory(String? id) {
+    final c = category(id);
+    if (c == null || c.parentId == null) return c;
+    return category(c.parentId);
+  }
+
+  List<Category> topCategories(CategoryKind kind) =>
+      _data.categories
+          .where((c) => c.kind == kind && c.parentId == null && !c.archived)
+          .toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+
+  List<Category> subcategories(String parentId) =>
+      _data.categories
+          .where((c) => c.parentId == parentId && !c.archived)
+          .toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+
+  /// Opérations non supprimées, les plus récentes d'abord.
+  List<Operation> get operations =>
+      _data.operations.where((o) => !o.deleted).toList()..sort((a, b) {
+        final byDate = b.date.compareTo(a.date);
+        return byDate != 0 ? byDate : b.createdAt.compareTo(a.createdAt);
+      });
+
+  Operation? operation(String id) {
+    for (final o in _data.operations) {
+      if (o.id == id) return o;
+    }
+    return null;
+  }
+
+  List<Operation> operationsInMonth(DateTime month) => operations
+      .where((o) => o.date.year == month.year && o.date.month == month.month)
+      .toList();
+
+  /// Solde = solde de départ + entrées − sorties.
+  int walletBalance(String walletId) {
+    final w = wallet(walletId);
+    var balance = w?.openingBalance ?? 0;
+    for (final o in _data.operations) {
+      if (o.deleted) continue;
+      if (o.targetWalletId == walletId) balance += o.amount;
+      if (o.sourceWalletId == walletId) balance -= o.amount;
+    }
+    return balance;
+  }
+
+  int get totalBalance =>
+      wallets.fold(0, (sum, w) => sum + walletBalance(w.id));
+
+  MonthSummary monthSummary(DateTime month) {
+    var income = 0;
+    var expense = 0;
+    for (final o in operationsInMonth(month)) {
+      if (o.type == OperationType.income) income += o.amount;
+      if (o.type == OperationType.expense) expense += o.amount;
+    }
+    return MonthSummary(income: income, expense: expense);
+  }
+
+  /// Catégories principales les plus utilisées ces 90 derniers jours (puis
+  /// les plus récentes en cas d'égalité), complétées par l'ordre par défaut.
+  List<Category> frequentCategories(CategoryKind kind, {int count = 7}) {
+    final since = dateOnly(now()).subtract(const Duration(days: 90));
+    final uses = <String, int>{};
+    final lastUse = <String, DateTime>{};
+    for (final o in operations) {
+      if (o.date.isBefore(since)) continue;
+      final top = topCategory(o.categoryId);
+      if (top == null || top.kind != kind || top.archived) continue;
+      uses[top.id] = (uses[top.id] ?? 0) + 1;
+      final last = lastUse[top.id];
+      if (last == null || o.createdAt.isAfter(last)) {
+        lastUse[top.id] = o.createdAt;
+      }
+    }
+    final all = topCategories(kind);
+    final used = all.where((c) => uses.containsKey(c.id)).toList()
+      ..sort((a, b) {
+        final byCount = uses[b.id]!.compareTo(uses[a.id]!);
+        return byCount != 0
+            ? byCount
+            : lastUse[b.id]!.compareTo(lastUse[a.id]!);
+      });
+    final rest = all.where((c) => !uses.containsKey(c.id));
+    return [...used, ...rest].take(count).toList();
+  }
+
+  /// Portefeuille de la dernière opération de ce type, pour le présélectionner.
+  String? lastWalletFor(OperationType type) {
+    final ops = _data.operations.where((o) => !o.deleted && o.type == type);
+    Operation? last;
+    for (final o in ops) {
+      if (last == null || o.createdAt.isAfter(last.createdAt)) last = o;
+    }
+    if (last == null) return null;
+    final id = type == OperationType.income
+        ? last.targetWalletId
+        : last.sourceWalletId;
+    return wallet(id)?.archived == false ? id : null;
+  }
+
+  // ------------------------------------------------------------- Écriture
+
+  Future<void> completeSetup({
+    required String memberName,
+    int cash = 0,
+    int bank = 0,
+    int mobileMoney = 0,
+  }) async {
+    final t = now();
+    if (_data.categories.isEmpty) {
+      final cats = defaultCategories(t);
+      _data.categories.addAll(cats);
+      await _repo.upsertCategories(cats);
+    }
+    final ws = defaultWallets(
+      t,
+      cash: cash,
+      bank: bank,
+      mobileMoney: mobileMoney,
+    );
+    for (final w in ws) {
+      final i = _data.wallets.indexWhere((x) => x.id == w.id);
+      if (i >= 0) {
+        _data.wallets[i] = w;
+      } else {
+        _data.wallets.add(w);
+      }
+    }
+    await _repo.upsertWallets(ws);
+    _data.settings = _data.settings.copyWith(
+      setupDone: true,
+      memberId: _data.settings.memberId.isEmpty
+          ? _uuid.v4()
+          : _data.settings.memberId,
+      memberName: memberName.trim(),
+    );
+    await _repo.saveSettings(_data.settings);
+    notifyListeners();
+  }
+
+  Future<Operation> addOperation({
+    required OperationType type,
+    required int amount,
+    required DateTime date,
+    String? categoryId,
+    String? sourceWalletId,
+    String? targetWalletId,
+    String note = '',
+  }) async {
+    final t = now();
+    final op = Operation(
+      id: _uuid.v4(),
+      type: type,
+      amount: amount,
+      date: dateOnly(date),
+      categoryId: categoryId,
+      sourceWalletId: sourceWalletId,
+      targetWalletId: targetWalletId,
+      note: note.trim(),
+      authorId: settings.memberId,
+      createdAt: t,
+      updatedAt: t,
+    );
+    _data.operations.add(op);
+    notifyListeners();
+    await _repo.upsertOperation(op);
+    return op;
+  }
+
+  Future<void> updateOperation(Operation op) async {
+    final updated = op.copyWith(updatedAt: now(), date: dateOnly(op.date));
+    _replace(updated);
+    notifyListeners();
+    await _repo.upsertOperation(updated);
+  }
+
+  /// Suppression douce : l'opération est gardée et peut être restaurée.
+  Future<void> deleteOperation(String id) async {
+    final op = operation(id);
+    if (op == null) return;
+    final t = now();
+    final deleted = op.copyWith(
+      deleted: true,
+      deletedAt: () => t,
+      updatedAt: t,
+    );
+    _replace(deleted);
+    notifyListeners();
+    await _repo.upsertOperation(deleted);
+  }
+
+  Future<void> restoreOperation(String id) async {
+    final op = operation(id);
+    if (op == null) return;
+    final restored = op.copyWith(
+      deleted: false,
+      deletedAt: () => null,
+      updatedAt: now(),
+    );
+    _replace(restored);
+    notifyListeners();
+    await _repo.upsertOperation(restored);
+  }
+
+  void _replace(Operation op) {
+    final i = _data.operations.indexWhere((o) => o.id == op.id);
+    if (i >= 0) _data.operations[i] = op;
+  }
+
+  Future<void> setTheme(ThemeChoice theme) async {
+    _data.settings = _data.settings.copyWith(theme: theme);
+    notifyListeners();
+    await _repo.saveSettings(_data.settings);
+  }
+
+  Future<void> setMemberName(String name) async {
+    _data.settings = _data.settings.copyWith(memberName: name.trim());
+    notifyListeners();
+    await _repo.saveSettings(_data.settings);
+  }
+
+  Future<void> updateWallet(Wallet wallet) async {
+    final updated = wallet.copyWith(updatedAt: now());
+    final i = _data.wallets.indexWhere((w) => w.id == wallet.id);
+    if (i >= 0) _data.wallets[i] = updated;
+    notifyListeners();
+    await _repo.upsertWallets([updated]);
+  }
+}
+
+/// Donne accès au [BudgetStore] dans l'arbre des widgets et reconstruit les
+/// écrans quand les données changent.
+class StoreScope extends InheritedNotifier<BudgetStore> {
+  const StoreScope({
+    super.key,
+    required BudgetStore store,
+    required super.child,
+  }) : super(notifier: store);
+
+  static BudgetStore of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<StoreScope>()!.notifier!;
+
+  /// Accès sans abonnement aux changements (pour les actions).
+  static BudgetStore read(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<StoreScope>()!.notifier!;
+}
