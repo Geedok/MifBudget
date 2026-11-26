@@ -7,6 +7,7 @@ import '../models/savings_goal.dart';
 import '../models/wallet.dart';
 import '../state/budget_store.dart';
 import '../theme.dart';
+import 'categories_screen.dart';
 import 'widgets/amount_keypad.dart';
 import 'widgets/common.dart';
 
@@ -1111,6 +1112,14 @@ class _CategoryPicker extends StatelessWidget {
                 onTap: () => Navigator.of(context).pop(s.id),
               ),
           ],
+          ListTile(
+            leading: Icon(Icons.tune, color: mif.green),
+            title: Text(
+              'Gérer les catégories',
+              style: TextStyle(color: mif.green),
+            ),
+            onTap: () => CategoriesScreen.open(context, kind: kind),
+          ),
         ],
       ),
     );

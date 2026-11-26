@@ -4,6 +4,7 @@ import '../core/format.dart';
 import '../models/settings.dart';
 import '../state/budget_store.dart';
 import '../theme.dart';
+import 'categories_screen.dart';
 import 'wallet_form_screen.dart';
 import 'widgets/common.dart';
 
@@ -27,6 +28,19 @@ class SettingsScreen extends StatelessWidget {
               title: const Text('Prénom'),
               subtitle: Text(store.settings.memberName),
               onTap: () => _editName(context, store),
+            ),
+          ),
+          const _Header('Catégories'),
+          MifCard(
+            padding: EdgeInsets.zero,
+            child: ListTile(
+              leading: const Icon(Icons.label_outline),
+              title: const Text('Catégories et sous-catégories'),
+              subtitle: const Text(
+                'Créer, renommer, archiver, changer de groupe',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => CategoriesScreen.open(context),
             ),
           ),
           const _Header('Apparence'),

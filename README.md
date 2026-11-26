@@ -34,7 +34,13 @@ Application Android de budget familial (Flutter). Voir `CLAUDE.md` pour le cahie
 - Saisie des plafonds : montant proposé sous chaque catégorie (moyenne des 3 mois précédents, arrondie au millier), bouton « Proposer les plafonds », copie des plafonds du mois précédent sans écraser.
 - Après une dépense, la confirmation prévient si la catégorie atteint 80 % ou dépasse son plafond ; l'Accueil affiche « Budgets à surveiller ».
 
-Suite possible : opérations récurrentes, argent personnel, gestion des catégories, synchronisation Firebase entre les deux téléphones.
+**Gestion des catégories** (version 0.7.0)
+- Réglages → « Catégories et sous-catégories » (ou « Gérer les catégories » au bas de la liste « Autre » de la saisie) : dépenses par groupe (Essentiel, Confort, sans groupe) et revenus.
+- Créer une catégorie (nom, groupe, icône parmi 36, couleur), la modifier (le groupe, l'icône et la couleur passent aux sous-catégories), l'archiver puis la restaurer ; noms en double refusés au même niveau.
+- Sous-catégories : ajouter, renommer, archiver, restaurer.
+- Archiver ne supprime rien : les opérations déjà saisies gardent leur catégorie et restent comptées.
+
+Suite possible : opérations récurrentes, argent personnel, synchronisation Firebase entre les deux téléphones.
 
 ## Développement
 

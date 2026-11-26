@@ -57,6 +57,27 @@ class Category {
 
   bool get isSub => parentId != null;
 
+  Category copyWith({
+    String? name,
+    CategoryGroup? Function()? group,
+    String? icon,
+    int? color,
+    bool? archived,
+    int? sortOrder,
+    DateTime? updatedAt,
+  }) => Category(
+    id: id,
+    name: name ?? this.name,
+    kind: kind,
+    group: group != null ? group() : this.group,
+    parentId: parentId,
+    icon: icon ?? this.icon,
+    color: color ?? this.color,
+    archived: archived ?? this.archived,
+    sortOrder: sortOrder ?? this.sortOrder,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'nom': name,

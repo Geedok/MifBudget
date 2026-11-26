@@ -5,6 +5,7 @@ import 'package:mifbudget/app.dart';
 import 'package:mifbudget/core/format.dart';
 import 'package:mifbudget/data/defaults.dart';
 import 'package:mifbudget/data/repository.dart';
+import 'package:mifbudget/models/category.dart';
 import 'package:mifbudget/models/operation.dart';
 import 'package:mifbudget/models/project.dart';
 import 'package:mifbudget/models/wallet.dart';
@@ -18,6 +19,24 @@ void main() {
   });
 
   final clock = DateTime(2026, 11, 26, 10);
+
+  /// Fait défiler la liste du dessus jusqu'au texte, puis le centre.
+  Future<void> reveal(WidgetTester tester, String text) async {
+    await tester.scrollUntilVisible(
+      find.text(text),
+      200,
+      // La liste de l'écran du dessus (un champ de texte contient aussi
+      // une zone défilante).
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.ensureVisible(find.text(text).last);
+    await tester.pumpAndSettle();
+  }
 
   Future<void> type(WidgetTester tester, List<String> keys) async {
     for (final k in keys) {
@@ -598,5 +617,72 @@ void main() {
     await tester.tap(find.text('Accueil'));
     await tester.pumpAndSettle();
     expect(find.text('Budgets à surveiller'), findsOneWidget);
+  });
+
+  testWidgets('créer une catégorie et l\'utiliser dans la saisie', (
+    tester,
+  ) async {
+    final store = await pumpApp(tester);
+    await tester.tap(find.byTooltip('Réglages'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Catégories et sous-catégories'));
+    await tester.pumpAndSettle();
+    expect(find.text('Essentiel'), findsOneWidget);
+    await reveal(tester, 'Nouvelle catégorie');
+    await tester.tap(find.text('Nouvelle catégorie'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Nom'),
+      'Alimentation',
+    );
+    await tester.pump();
+    expect(find.text('Ce nom existe déjà'), findsWidgets);
+    await tester.enterText(find.widgetWithText(TextField, 'Nom'), 'Animaux');
+    await tester.pump();
+    await tester.tap(find.bySemanticsLabel('Animaux'));
+    await tester.pump();
+    await reveal(tester, 'Enregistrer');
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    final animaux = store
+        .topCategories(CategoryKind.expense)
+        .firstWhere((c) => c.name == 'Animaux');
+    expect(animaux.icon, 'animaux');
+    expect(animaux.group, CategoryGroup.comfort);
+
+    // Ajouter une sous-catégorie depuis la fiche.
+    await reveal(tester, 'Animaux');
+    await tester.tap(find.text('Animaux'));
+    await tester.pumpAndSettle();
+    await reveal(tester, 'Ajouter une sous-catégorie');
+    await tester.tap(find.text('Ajouter une sous-catégorie'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Vétérinaire');
+    await tester.pump();
+    await tester.tap(find.text('Enregistrer').last);
+    await tester.pumpAndSettle();
+    expect(store.subcategories(animaux.id).single.name, 'Vétérinaire');
+    await tester.tap(find.byTooltip('Fermer'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Retour'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Retour'));
+    await tester.pumpAndSettle();
+
+    // Dans la saisie : « Autre » → la nouvelle sous-catégorie.
+    await tester.tap(find.byTooltip('Ajouter une opération'));
+    await tester.pumpAndSettle();
+    await type(tester, ['7', '000']);
+    await tester.tap(find.text('Autre'));
+    await tester.pumpAndSettle();
+    await reveal(tester, 'Vétérinaire');
+    await tester.tap(find.text('Vétérinaire'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(
+      store.topCategory(store.operations.single.categoryId)!.id,
+      animaux.id,
+    );
   });
 }

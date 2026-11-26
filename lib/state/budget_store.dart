@@ -256,6 +256,49 @@ class BudgetStore extends ChangeNotifier {
           .toList()
         ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
 
+  /// Catégories principales archivées (pour pouvoir les restaurer).
+  List<Category> archivedTopCategories(CategoryKind kind) =>
+      _data.categories
+          .where((c) => c.kind == kind && c.parentId == null && c.archived)
+          .toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
+
+  /// Sous-catégories archivées d'une catégorie.
+  List<Category> archivedSubcategories(String parentId) =>
+      _data.categories
+          .where((c) => c.parentId == parentId && c.archived)
+          .toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
+
+  /// Un nom déjà pris par une catégorie active de même niveau (sans tenir
+  /// compte des majuscules ni des espaces autour).
+  bool categoryNameTaken(
+    String name, {
+    required CategoryKind kind,
+    String? parentId,
+    String? exceptId,
+  }) {
+    final n = name.trim().toLowerCase();
+    return _data.categories.any(
+      (c) =>
+          c.id != exceptId &&
+          !c.archived &&
+          c.kind == kind &&
+          c.parentId == parentId &&
+          c.name.trim().toLowerCase() == n,
+    );
+  }
+
+  /// Nombre d'opérations (non supprimées) d'une catégorie et de ses
+  /// sous-catégories.
+  int categoryUsage(String categoryId) => operations
+      .where(
+        (o) =>
+            o.categoryId == categoryId ||
+            category(o.categoryId)?.parentId == categoryId,
+      )
+      .length;
+
   /// Opérations non supprimées, les plus récentes d'abord.
   List<Operation> get operations =>
       _data.operations.where((o) => !o.deleted).toList()..sort((a, b) {
@@ -979,6 +1022,70 @@ class BudgetStore extends ChangeNotifier {
     notifyListeners();
     await _repo.upsertWallets([w]);
     return w;
+  }
+
+  /// Nouvelle catégorie (ou sous-catégorie si [parentId] est donné : elle
+  /// prend alors le type, le groupe, l'icône et la couleur de sa parente).
+  Future<Category> addCategory({
+    required String name,
+    required CategoryKind kind,
+    CategoryGroup? group,
+    String? parentId,
+    String icon = 'divers',
+    int color = 0xFF6E7A74,
+  }) async {
+    final parent = category(parentId);
+    final siblings = _data.categories.where(
+      (c) => c.parentId == parentId && c.kind == (parent?.kind ?? kind),
+    );
+    final c = Category(
+      id: _uuid.v4(),
+      name: name.trim(),
+      kind: parent?.kind ?? kind,
+      group: parent != null ? parent.group : group,
+      parentId: parentId,
+      icon: parent?.icon ?? icon,
+      color: parent?.color ?? color,
+      sortOrder: siblings.fold(
+        0,
+        (m, c) => c.sortOrder >= m ? c.sortOrder + 1 : m,
+      ),
+      updatedAt: now(),
+    );
+    _data.categories.add(c);
+    notifyListeners();
+    await _repo.upsertCategories([c]);
+    return c;
+  }
+
+  /// Modifie une catégorie. Pour une catégorie principale, le groupe,
+  /// l'icône et la couleur sont reportés sur ses sous-catégories.
+  Future<void> updateCategory(Category c) async {
+    final t = now();
+    final changed = <Category>[c.copyWith(updatedAt: t)];
+    if (!c.isSub) {
+      for (final sub in _data.categories.where((x) => x.parentId == c.id)) {
+        if (sub.group == c.group &&
+            sub.icon == c.icon &&
+            sub.color == c.color) {
+          continue;
+        }
+        changed.add(
+          sub.copyWith(
+            group: () => c.group,
+            icon: c.icon,
+            color: c.color,
+            updatedAt: t,
+          ),
+        );
+      }
+    }
+    for (final x in changed) {
+      final i = _data.categories.indexWhere((y) => y.id == x.id);
+      if (i >= 0) _data.categories[i] = x;
+    }
+    notifyListeners();
+    await _repo.upsertCategories(changed);
   }
 
   Future<void> updateWallet(Wallet wallet) async {

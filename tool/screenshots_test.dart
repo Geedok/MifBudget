@@ -321,6 +321,16 @@ void main() {
       await tester.pumpAndSettle();
       await tester.drag(find.byType(Scrollable).last, const Offset(0, -420));
       await shot(tester, '9-simulateur-$suffix');
+      await tester.tap(find.byTooltip('Retour'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Accueil'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Réglages'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Catégories et sous-catégories'));
+      await shot(tester, '11-categories-$suffix');
+      await tester.tap(find.text('Alimentation'));
+      await shot(tester, '12-categorie-$suffix');
     });
   }
 }
