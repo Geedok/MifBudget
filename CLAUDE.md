@@ -1,0 +1,52 @@
+# MifBudget — instructions pour Claude Code
+
+Application mobile Android de budget familial pour Eudokia et sa femme (deux utilisateurs, un foyer). Langue de l'app et des échanges : français. Devise : franc CFA (XOF), montants entiers, affichés « 125 000 FCFA ».
+
+Références (à jour au 26/11/2026) :
+- Cahier des charges complet : https://claude.ai/artifact/Lgbnou5TRSuPiExDb1nyMv
+- Maquettes (Accueil, Saisie rapide, Épargnes et projets, Mon argent personnel, Budgets) : https://claude.ai/artifact/A3DG42xPYezNxgJZA2quUa (affichent encore l'ancien nom « Budgify » : le nom est MifBudget)
+- Charte jour / nuit : https://claude.ai/artifact/PHXC5a4NFFQBa7BsAJvuX9
+
+## Choix techniques
+
+- Flutter (Android seulement en V1 ; les deux téléphones sont sous Android), distribution par APK ou Google Play.
+- Firebase : Cloud Firestore avec persistance hors ligne + Firebase Authentication (connexion par compte Google), puis code PIN ou empreinte à l'ouverture.
+- Identifiants générés sur le téléphone (UUID). Soldes jamais stockés : recalculés à partir des opérations. Suppression douce (champ supprimée), annulable 30 jours.
+- Conflits : dernière modification gagne, historique conservé ; une suppression l'emporte sur une modification.
+
+## Fonctionnalités V1 (ordre de priorité)
+
+Indispensable : opérations (revenu, dépense, transfert, versement/retrait d'épargne), catégories et sous-catégories, budgets mensuels, épargnes.
+Important : opérations récurrentes (salaire, loyer, argent personnel mensuel, abonnements), projets avec budget.
+Utile : rapports (bilan mensuel, répartition par catégorie, 12 mois, export PDF/tableur).
+
+- Portefeuilles : espèces, banque, Mobile Money (communs, visibles des deux).
+- Épargnes : « enveloppes » dans le même compte (pas de comptes séparés). Nom + montant cible saisis à la création (modifiable), date cible facultative. Au départ : épargne de sûreté et épargne de construction ; on peut en créer d'autres. Verser = mettre de côté, pas une dépense. Le disponible exclut l'argent mis de côté.
+- Budgets : plafond par catégorie et par mois. L'app propose un montant (moyenne des 3 derniers mois) mais l'utilisateur peut saisir le sien. Copier les plafonds du mois précédent. Barre verte < 80 %, orange ≥ 80 %, rouge « Dépassé ».
+- Pas de suivi de tontine.
+
+## Argent personnel (règle de confidentialité importante)
+
+- Option activable dans les Réglages. Chaque conjoint a un portefeuille personnel alimenté par un montant mensuel paramétrable (ex. 30 000 FCFA), créé par une opération récurrente.
+- L'autre conjoint voit uniquement le versement mensuel. Il ne voit ni le détail des dépenses personnelles, ni le solde restant.
+- Chaque dépense personnelle est privée par défaut ; un interrupteur « Rendre visible » la montre à l'autre.
+- Les dépenses privées sont stockées à part et lisibles par leur seul propriétaire, y compris côté serveur (règles Firestore) : l'autre téléphone ne les reçoit jamais.
+- Chacun a ses statistiques d'argent personnel (par catégorie, mois par mois, reste), visibles par lui seul.
+
+## Catégories par défaut
+
+Dépenses (groupe) : Alimentation (Essentiel) · Logement (Essentiel) · Transport (Essentiel) · Communication (Essentiel) · Santé (Essentiel) · Enfants et école (Essentiel) · Dettes et crédits (Essentiel) · Frais financiers, dont frais Mobile Money (Essentiel) · Famille et solidarité, dont cérémonies (Confort) · Dons et religion (Confort) · Maison et équipement (Confort) · Habillement et soins (Confort) · Loisirs (Confort) · Argent personnel (Confort) · Divers (Confort).
+Revenus : Salaires · Activités annexes · Autres revenus.
+Tout est modifiable : créer, renommer, archiver des catégories et sous-catégories, changer de groupe.
+
+## Données (Firestore)
+
+Foyer (nom, devise XOF, argent personnel activé) · Membre · Portefeuille (type espèces/banque/Mobile Money, solde de départ, commun ou personnel, propriétaire, montant mensuel) · Catégorie (type, groupe, parente, icône, couleur, archivée) · Opération (type, montant, date, catégorie, portefeuilles source/cible, projet, objectif d'épargne, note, visible par l'autre, auteur, dates, supprimée) · Budget (catégorie, mois AAAA-MM, plafond) · Objectif d'épargne (nom, portefeuille, cible, date cible, projet lié) · Projet · Récurrence.
+
+## Écrans
+
+Barre du bas : Accueil, Opérations, Budgets, Épargnes, Rapports ; bouton « + » flottant pour la saisie rapide. Réglages accessibles depuis l'Accueil. Installation : compte, foyer, portefeuilles et soldes de départ, deux épargnes avec cible, invitation du conjoint (code ou lien).
+
+## Charte graphique
+
+Police Inter. Jour : vert #1F6B4F, terre cuite #B4531A, fond #F5F6F3, cartes #FFFFFF, texte #1C2420, texte secondaire #5B6660. Nuit : fond #101513, cartes #1A211E, vert #5CC197, terre cuite #E5884E, texte #E6ECE8. Suit le réglage du téléphone, avec un choix forcé possible dans les Réglages.
