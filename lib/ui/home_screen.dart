@@ -7,6 +7,7 @@ import '../state/budget_store.dart';
 import '../theme.dart';
 import 'home_shell.dart';
 import 'budgets_screen.dart';
+import 'recurrences_screen.dart';
 import 'settings_screen.dart';
 import 'wallet_form_screen.dart';
 import 'widgets/charts.dart';
@@ -137,6 +138,7 @@ class HomeScreen extends StatelessWidget {
           const SizedBox(height: 12),
           IncomeCard(onOpenReport: onOpenReport),
           const SizedBox(height: 12),
+          const RecurringCard(),
           _BudgetAlerts(onOpenBudgets: onOpenBudgets),
           _SavingsCard(onOpenSavings: onOpenSavings),
           const SizedBox(height: 12),

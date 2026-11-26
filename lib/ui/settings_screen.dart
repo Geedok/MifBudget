@@ -5,6 +5,7 @@ import '../models/settings.dart';
 import '../state/budget_store.dart';
 import '../theme.dart';
 import 'categories_screen.dart';
+import 'recurrences_screen.dart';
 import 'wallet_form_screen.dart';
 import 'widgets/common.dart';
 
@@ -28,6 +29,21 @@ class SettingsScreen extends StatelessWidget {
               title: const Text('Prénom'),
               subtitle: Text(store.settings.memberName),
               onTap: () => _editName(context, store),
+            ),
+          ),
+          const _Header('Opérations récurrentes'),
+          MifCard(
+            padding: EdgeInsets.zero,
+            child: ListTile(
+              leading: const Icon(Icons.repeat),
+              title: const Text('Opérations récurrentes'),
+              subtitle: Text(
+                store.recurrences.isEmpty
+                    ? 'Loyer, salaire, abonnements…'
+                    : '${store.recurrences.length} en cours',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => RecurrencesScreen.open(context),
             ),
           ),
           const _Header('Catégories'),

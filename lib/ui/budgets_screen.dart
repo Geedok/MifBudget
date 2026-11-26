@@ -188,6 +188,26 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
                     ].join(' · '),
                     style: TextStyle(fontSize: 13, color: mif.textSecondary),
                   ),
+                  if (isCurrent &&
+                      budgets.any(
+                        (b) =>
+                            store.plannedExpenses(
+                              month,
+                              categoryId: b.categoryId,
+                            ) >
+                            0,
+                      ))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        'Dont ${formatFcfa(budgets.fold<int>(0, (s, b) => s + store.plannedExpenses(month, categoryId: b.categoryId)))} '
+                        'de dépenses récurrentes encore prévues',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: mif.textSecondary,
+                        ),
+                      ),
+                    ),
                   if (outside > 0)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),

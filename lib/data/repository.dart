@@ -5,6 +5,7 @@ import '../models/budget.dart';
 import '../models/category.dart';
 import '../models/operation.dart';
 import '../models/project.dart';
+import '../models/recurrence.dart';
 import '../models/savings_goal.dart';
 import '../models/settings.dart';
 import '../models/wallet.dart';
@@ -20,12 +21,14 @@ class BudgetData {
     List<SavingsGoal>? goals,
     List<Project>? projects,
     List<Budget>? budgets,
+    List<Recurrence>? recurrences,
   }) : wallets = wallets ?? [],
        categories = categories ?? [],
        operations = operations ?? [],
        goals = goals ?? [],
        projects = projects ?? [],
-       budgets = budgets ?? [];
+       budgets = budgets ?? [],
+       recurrences = recurrences ?? [];
 
   /// Version du format lue dans le fichier (pour les reprises de données).
   int version;
@@ -36,6 +39,7 @@ class BudgetData {
   final List<SavingsGoal> goals;
   final List<Project> projects;
   final List<Budget> budgets;
+  final List<Recurrence> recurrences;
 
   /// 2 : comptes épargne (rôle des portefeuilles), l'épargne devient un
   /// virement vers un compte épargne.
@@ -50,6 +54,7 @@ class BudgetData {
     'objectifsEpargne': goals.map((g) => g.toJson()).toList(),
     'projets': projects.map((p) => p.toJson()).toList(),
     'budgets': budgets.map((b) => b.toJson()).toList(),
+    'recurrences': recurrences.map((r) => r.toJson()).toList(),
   };
 
   factory BudgetData.fromJson(Map<String, dynamic> j) {
@@ -66,6 +71,7 @@ class BudgetData {
       goals: list('objectifsEpargne').map(SavingsGoal.fromJson).toList(),
       projects: list('projets').map(Project.fromJson).toList(),
       budgets: list('budgets').map(Budget.fromJson).toList(),
+      recurrences: list('recurrences').map(Recurrence.fromJson).toList(),
     );
   }
 }
@@ -81,6 +87,11 @@ abstract class BudgetRepository {
   Future<void> upsertGoal(SavingsGoal goal);
   Future<void> upsertProject(Project project);
   Future<void> upsertBudgets(List<Budget> budgets);
+  Future<void> upsertRecurrence(Recurrence recurrence);
+
+  /// Efface définitivement une opération (seulement pour annuler aussitôt
+  /// une échéance confirmée ou ignorée ; sinon, suppression douce).
+  Future<void> removeOperation(String id);
 }
 
 /// Stockage en mémoire, pour les tests.
@@ -144,6 +155,18 @@ class MemoryRepository implements BudgetRepository {
       _upsert(data.budgets, b, (x) => x.id == b.id);
     }
   }
+
+  @override
+  Future<void> upsertRecurrence(Recurrence recurrence) async {
+    _touch();
+    _upsert(data.recurrences, recurrence, (x) => x.id == recurrence.id);
+  }
+
+  @override
+  Future<void> removeOperation(String id) async {
+    _touch();
+    data.operations.removeWhere((o) => o.id == id);
+  }
 }
 
 void _upsert<T>(List<T> list, T item, bool Function(T) same) {
@@ -192,6 +215,9 @@ class LocalJsonRepository extends MemoryRepository {
         data.budgets
           ..clear()
           ..addAll(loaded.budgets);
+        data.recurrences
+          ..clear()
+          ..addAll(loaded.recurrences);
       }
     }
     return super.load();
@@ -246,6 +272,18 @@ class LocalJsonRepository extends MemoryRepository {
   @override
   Future<void> upsertBudgets(List<Budget> budgets) async {
     await super.upsertBudgets(budgets);
+    await _write();
+  }
+
+  @override
+  Future<void> upsertRecurrence(Recurrence recurrence) async {
+    await super.upsertRecurrence(recurrence);
+    await _write();
+  }
+
+  @override
+  Future<void> removeOperation(String id) async {
+    await super.removeOperation(id);
     await _write();
   }
 }

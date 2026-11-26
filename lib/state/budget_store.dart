@@ -9,6 +9,7 @@ import '../models/budget.dart';
 import '../models/category.dart';
 import '../models/operation.dart';
 import '../models/project.dart';
+import '../models/recurrence.dart';
 import '../models/savings_goal.dart';
 import '../models/settings.dart';
 import '../models/wallet.dart';
@@ -76,6 +77,18 @@ class CategoryTrend {
   double? get change => previous == 0 ? null : (recent - previous) / previous;
 }
 
+/// Échéance mensuelle d'une récurrence.
+class Occurrence {
+  const Occurrence(this.recurrence, this.month);
+
+  final Recurrence recurrence;
+
+  /// Premier jour du mois concerné.
+  final DateTime month;
+
+  DateTime get date => recurrence.dateIn(month);
+}
+
 /// Total d'une catégorie principale sur un mois, avec le détail par
 /// sous-catégorie (l'argent saisi directement sur la catégorie principale
 /// apparaît sous son propre nom).
@@ -108,6 +121,7 @@ class BudgetStore extends ChangeNotifier {
     final data = await repo.load();
     final store = BudgetStore._(repo, data, clock ?? DateTime.now);
     if (data.version < 2) await store._migrateToSavingsAccounts();
+    await store.processAutomaticRecurrences();
     return store;
   }
 
@@ -549,6 +563,234 @@ class BudgetStore extends ChangeNotifier {
     ]..sort((a, b) => b.recent.compareTo(a.recent));
   }
 
+  // ------------------------------------------------------------ Récurrences
+
+  /// Récurrences non arrêtées (en pause comprises), par jour du mois.
+  List<Recurrence> get recurrences =>
+      _data.recurrences.where((r) => !r.stopped).toList()
+        ..sort((a, b) => a.dayOfMonth.compareTo(b.dayOfMonth));
+
+  List<Recurrence> get stoppedRecurrences =>
+      _data.recurrences.where((r) => r.stopped).toList();
+
+  Recurrence? recurrence(String? id) {
+    for (final r in _data.recurrences) {
+      if (r.id == id) return r;
+    }
+    return null;
+  }
+
+  /// L'échéance d'un mois a-t-elle déjà été traitée (enregistrée, ou
+  /// ignorée, ce qui laisse une opération supprimée) ?
+  bool isHandled(Recurrence r, DateTime month) => _data.operations.any(
+    (o) =>
+        o.recurrenceId == r.id &&
+        o.date.year == month.year &&
+        o.date.month == month.month,
+  );
+
+  /// Échéances passées ou du jour, pas encore traitées.
+  List<Occurrence> dueOccurrences() {
+    final today = dateOnly(now());
+    final result = <Occurrence>[];
+    for (final r in _data.recurrences) {
+      if (!r.active) continue;
+      var m = DateTime(r.startMonth.year, r.startMonth.month);
+      while (!r.dateIn(m).isAfter(today)) {
+        if (r.covers(m) && !isHandled(r, m)) result.add(Occurrence(r, m));
+        m = DateTime(m.year, m.month + 1);
+      }
+    }
+    return result..sort((a, b) => a.date.compareTo(b.date));
+  }
+
+  /// Échéances à confirmer (les automatiques sont enregistrées seules).
+  List<Occurrence> get pendingOccurrences =>
+      dueOccurrences().where((o) => !o.recurrence.automatic).toList();
+
+  /// Échéances des [days] prochains jours (après aujourd'hui).
+  List<Occurrence> upcomingOccurrences({int days = 30}) {
+    final today = dateOnly(now());
+    final limit = today.add(Duration(days: days));
+    final result = <Occurrence>[];
+    for (final r in _data.recurrences) {
+      if (!r.active) continue;
+      for (var i = 0; i <= 2; i++) {
+        final m = DateTime(today.year, today.month + i);
+        final d = r.dateIn(m);
+        if (!d.isAfter(today) || d.isAfter(limit)) continue;
+        if (r.covers(m) && !isHandled(r, m)) result.add(Occurrence(r, m));
+      }
+    }
+    return result..sort((a, b) => a.date.compareTo(b.date));
+  }
+
+  /// Échéances d'un mois pas encore enregistrées (à venir ou à confirmer).
+  List<Occurrence> remainingInMonth(DateTime month) {
+    final m = DateTime(month.year, month.month);
+    return [
+      for (final r in _data.recurrences)
+        if (r.active && r.covers(m) && !isHandled(r, m)) Occurrence(r, m),
+    ]..sort((a, b) => a.date.compareTo(b.date));
+  }
+
+  /// Opération correspondant à une échéance (pas encore enregistrée).
+  Operation draftFor(Occurrence o) {
+    final r = o.recurrence;
+    final t = now();
+    return Operation(
+      id: r.operationIdFor(o.month),
+      type: r.type,
+      amount: r.amount,
+      date: o.date,
+      categoryId: r.categoryId,
+      sourceWalletId: r.sourceWalletId,
+      targetWalletId: r.targetWalletId,
+      savingsGoalId: r.savingsGoalId,
+      projectId: r.projectId,
+      recurrenceId: r.id,
+      note: r.note,
+      authorId: settings.memberId,
+      createdAt: t,
+      updatedAt: t,
+    );
+  }
+
+  /// Enregistre l'échéance (montant éventuellement ajusté).
+  Future<Operation> confirmOccurrence(Occurrence o, {int? amount}) {
+    final d = draftFor(o);
+    return addOperation(
+      id: d.id,
+      type: d.type,
+      amount: amount ?? d.amount,
+      date: d.date,
+      categoryId: d.categoryId,
+      sourceWalletId: d.sourceWalletId,
+      targetWalletId: d.targetWalletId,
+      savingsGoalId: d.savingsGoalId,
+      projectId: d.projectId,
+      recurrenceId: d.recurrenceId,
+      note: d.note,
+    );
+  }
+
+  /// Ignore l'échéance du mois : une opération supprimée la marque comme
+  /// traitée (et peut être restaurée).
+  Future<void> skipOccurrence(Occurrence o) async {
+    final d = draftFor(o);
+    await addOperation(
+      id: d.id,
+      type: d.type,
+      amount: d.amount,
+      date: d.date,
+      categoryId: d.categoryId,
+      sourceWalletId: d.sourceWalletId,
+      targetWalletId: d.targetWalletId,
+      savingsGoalId: d.savingsGoalId,
+      projectId: d.projectId,
+      recurrenceId: d.recurrenceId,
+      note: d.note,
+      deleted: true,
+    );
+  }
+
+  /// Annule aussitôt une échéance confirmée ou ignorée : l'opération est
+  /// effacée et l'échéance redevient à confirmer.
+  Future<void> undoOccurrence(String operationId) async {
+    _data.operations.removeWhere((o) => o.id == operationId);
+    notifyListeners();
+    await _repo.removeOperation(operationId);
+  }
+
+  /// Enregistre les échéances automatiques en retard (au démarrage et
+  /// après une modification) ; renvoie le nombre d'opérations créées.
+  Future<int> processAutomaticRecurrences() async {
+    final due = dueOccurrences().where((o) => o.recurrence.automatic);
+    var n = 0;
+    for (final o in due) {
+      await confirmOccurrence(o);
+      n++;
+    }
+    return n;
+  }
+
+  /// Nouvelle récurrence. Si [linkedOperationId] est donné, cette opération
+  /// devient l'échéance de son mois (pour ne pas l'enregistrer deux fois).
+  Future<Recurrence> addRecurrence({
+    required OperationType type,
+    required int amount,
+    String? categoryId,
+    String? sourceWalletId,
+    String? targetWalletId,
+    String? savingsGoalId,
+    String? projectId,
+    String note = '',
+    required int dayOfMonth,
+    required DateTime startMonth,
+    DateTime? endMonth,
+    bool automatic = false,
+    String? linkedOperationId,
+  }) async {
+    final t = now();
+    final r = Recurrence(
+      id: _uuid.v4(),
+      type: type,
+      amount: amount,
+      categoryId: categoryId,
+      sourceWalletId: sourceWalletId,
+      targetWalletId: targetWalletId,
+      savingsGoalId: savingsGoalId,
+      projectId: projectId,
+      note: note.trim(),
+      dayOfMonth: dayOfMonth.clamp(1, 31),
+      startMonth: DateTime(startMonth.year, startMonth.month),
+      endMonth: endMonth == null
+          ? null
+          : DateTime(endMonth.year, endMonth.month),
+      automatic: automatic,
+      createdAt: t,
+      updatedAt: t,
+    );
+    _data.recurrences.add(r);
+    await _repo.upsertRecurrence(r);
+    final linked = linkedOperationId == null
+        ? null
+        : operation(linkedOperationId);
+    if (linked != null) {
+      await updateOperation(linked.copyWith(recurrenceId: () => r.id));
+    }
+    notifyListeners();
+    await processAutomaticRecurrences();
+    return r;
+  }
+
+  Future<void> updateRecurrence(Recurrence r) async {
+    final updated = r.copyWith(updatedAt: now());
+    final i = _data.recurrences.indexWhere((x) => x.id == r.id);
+    if (i >= 0) _data.recurrences[i] = updated;
+    notifyListeners();
+    await _repo.upsertRecurrence(updated);
+    await processAutomaticRecurrences();
+  }
+
+  /// Revenus récurrents du mois pas encore reçus.
+  List<Occurrence> expectedIncomes(DateTime month) =>
+      remainingInMonth(month)
+          .where((o) => o.recurrence.type == OperationType.income)
+          .toList();
+
+  /// Dépenses récurrentes du mois pas encore enregistrées (toutes ou d'une
+  /// catégorie principale).
+  int plannedExpenses(DateTime month, {String? categoryId}) =>
+      remainingInMonth(month)
+          .where(
+            (o) =>
+                o.recurrence.type == OperationType.expense &&
+                (categoryId == null ||
+                    topCategory(o.recurrence.categoryId)?.id == categoryId),
+          )
+          .fold(0, (sum, o) => sum + o.recurrence.amount);
+
   // ----------------------------------------------------------------- Budgets
 
   /// Plafond d'une catégorie pour un mois (0 : pas de budget).
@@ -922,11 +1164,14 @@ class BudgetStore extends ChangeNotifier {
     String? targetWalletId,
     String? savingsGoalId,
     String? projectId,
+    String? recurrenceId,
+    String? id,
     String note = '',
+    bool deleted = false,
   }) async {
     final t = now();
     final op = Operation(
-      id: _uuid.v4(),
+      id: id ?? _uuid.v4(),
       type: type,
       amount: amount,
       date: dateOnly(date),
@@ -935,6 +1180,9 @@ class BudgetStore extends ChangeNotifier {
       targetWalletId: targetWalletId,
       savingsGoalId: savingsGoalId,
       projectId: projectId,
+      recurrenceId: recurrenceId,
+      deleted: deleted,
+      deletedAt: deleted ? t : null,
       note: note.trim(),
       authorId: settings.memberId,
       createdAt: t,

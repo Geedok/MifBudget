@@ -40,7 +40,14 @@ Application Android de budget familial (Flutter). Voir `CLAUDE.md` pour le cahie
 - Sous-catégories : ajouter, renommer, archiver, restaurer.
 - Archiver ne supprime rien : les opérations déjà saisies gardent leur catégorie et restent comptées.
 
-Suite possible : opérations récurrentes, argent personnel, synchronisation Firebase entre les deux téléphones.
+**Opérations récurrentes** (version 0.8.0)
+- Mensuelles : dépense, revenu, virement d'épargne ou transfert, le jour J de chaque mois (le dernier jour pour les mois plus courts), à partir d'un mois, jusqu'à un mois facultatif.
+- « À confirmer » par défaut : le jour venu, l'Accueil la propose avec Confirmer / Ignorer (toucher la ligne pour ajuster le montant ou la date) ; « automatique » en option. Rattrapage des échéances manquées à l'ouverture, sans doublon ; « Annuler » juste après rend l'échéance à nouveau à confirmer.
+- Création depuis Réglages → Opérations récurrentes (saisie habituelle puis calendrier) ou depuis une opération déjà saisie (« Rendre récurrente », qui devient l'échéance de son mois). Pause, arrêt, reprise.
+- Accueil : « À confirmer » et « À venir » (30 jours) ; carte Revenus : revenus attendus du mois ; Budgets : dépenses récurrentes encore prévues.
+- Pas de notifications (choix du foyer).
+
+Suite possible : argent personnel, synchronisation Firebase entre les deux téléphones.
 
 ## Développement
 

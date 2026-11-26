@@ -88,6 +88,31 @@ class IncomeCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 SpentGauge(summary: summary),
               ],
+              for (final o in store.expectedIncomes(month))
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.schedule, size: 16, color: mif.textSecondary),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Attendu le ${shortDate(o.date)} : '
+                          '${store.category(o.recurrence.categoryId)?.name ?? 'revenu'}',
+                          style: TextStyle(fontSize: 13, color: mif.text),
+                        ),
+                      ),
+                      Text(
+                        formatAmount(o.recurrence.amount),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: mif.text,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
             ],
           ),
         ),

@@ -19,6 +19,7 @@ Future<void> openEntry(
   OperationType initialType = OperationType.expense,
   String? initialGoalId,
   String? initialWalletId,
+  EntryMode mode = EntryMode.normal,
 }) async {
   final store = StoreScope.read(context);
   final messenger = ScaffoldMessenger.of(context);
@@ -30,6 +31,7 @@ Future<void> openEntry(
     initialType: initialType,
     initialGoalId: initialGoalId,
     initialWalletId: initialWalletId,
+    mode: mode,
   );
   if (result == null) return;
   final op = result.operation;
@@ -57,7 +59,10 @@ Future<void> openEntry(
     };
     action = SnackBarAction(
       label: 'Annuler',
-      onPressed: () => store.deleteOperation(op.id),
+      // Une échéance récurrente annulée redevient à confirmer.
+      onPressed: () => op.recurrenceId == null
+          ? store.deleteOperation(op.id)
+          : store.undoOccurrence(op.id),
     );
   } else {
     message = 'Opération modifiée';

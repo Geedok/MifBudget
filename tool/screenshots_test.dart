@@ -233,6 +233,34 @@ void main() {
           targetWalletId: compte.id,
         );
       }
+      // Récurrences : salaire attendu le 28, loyer le 2 (dès décembre),
+      // abonnement du 26 à confirmer aujourd'hui, épargne automatique.
+      await store.addRecurrence(
+        type: OperationType.income,
+        amount: 650000,
+        categoryId: 'cat-salaires',
+        targetWalletId: DefaultIds.walletBank,
+        dayOfMonth: 28,
+        startMonth: DateTime(2026, 12),
+      );
+      await store.addRecurrence(
+        type: OperationType.expense,
+        amount: 150000,
+        categoryId: 'cat-logement-loyer',
+        sourceWalletId: DefaultIds.walletBank,
+        dayOfMonth: 2,
+        startMonth: DateTime(2026, 12),
+        automatic: true,
+      );
+      await store.addRecurrence(
+        type: OperationType.expense,
+        amount: 15000,
+        categoryId: 'cat-loisirs-abonnements',
+        sourceWalletId: DefaultIds.walletMobileMoney,
+        dayOfMonth: 26,
+        startMonth: DateTime(2026, 11),
+        note: 'Canal+',
+      );
       await store.setBudgets(DateTime(2026, 11), {
         'cat-logement': 150000,
         'cat-alimentation': 40000,
@@ -326,6 +354,10 @@ void main() {
       await tester.tap(find.text('Accueil'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Réglages'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Opérations récurrentes').last);
+      await shot(tester, '13-recurrences-$suffix');
+      await tester.tap(find.byTooltip('Retour'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Catégories et sous-catégories'));
       await shot(tester, '11-categories-$suffix');

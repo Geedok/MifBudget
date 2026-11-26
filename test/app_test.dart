@@ -20,20 +20,20 @@ void main() {
 
   final clock = DateTime(2026, 11, 26, 10);
 
-  /// Fait défiler la liste du dessus jusqu'au texte, puis le centre.
+  /// Fait défiler la liste de l'écran du dessus jusqu'au texte, puis le
+  /// centre (un champ de texte contient aussi une zone défilante, d'où la
+  /// recherche de la ListView).
   Future<void> reveal(WidgetTester tester, String text) async {
-    await tester.scrollUntilVisible(
-      find.text(text),
-      200,
-      // La liste de l'écran du dessus (un champ de texte contient aussi
-      // une zone défilante).
-      scrollable: find
-          .descendant(
-            of: find.byType(ListView).last,
-            matching: find.byType(Scrollable),
-          )
-          .first,
-    );
+    final list = find
+        .descendant(
+          of: find.byType(ListView).last,
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    for (var i = 0; i < 40 && find.text(text).evaluate().isEmpty; i++) {
+      await tester.drag(list, const Offset(0, -200));
+      await tester.pump();
+    }
     await tester.ensureVisible(find.text(text).last);
     await tester.pumpAndSettle();
   }
@@ -409,6 +409,7 @@ void main() {
     final store = await pumpApp(tester);
     await tester.tap(find.byTooltip('Réglages'));
     await tester.pumpAndSettle();
+    await reveal(tester, 'Ajouter un portefeuille');
     await tester.tap(find.text('Ajouter un portefeuille'));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'Nom'), 'Wave');
@@ -685,4 +686,87 @@ void main() {
       animaux.id,
     );
   });
+
+  testWidgets('rendre récurrente une opération déjà saisie', (tester) async {
+    final store = await pumpApp(tester);
+    await store.addOperation(
+      type: OperationType.expense,
+      amount: 150000,
+      date: DateTime(2026, 11, 4),
+      categoryId: 'cat-logement-loyer',
+      sourceWalletId: DefaultIds.walletCash,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Opérations').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Loyer').hitTestable().first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Rendre récurrente'));
+    await tester.pumpAndSettle();
+    expect(find.text('le 4 de chaque mois'), findsOneWidget);
+    expect(find.text('Novembre 2026'), findsOneWidget);
+    await reveal(tester, 'Enregistrer');
+    await tester.tap(find.text('Enregistrer').last);
+    await tester.pumpAndSettle();
+    final r = store.recurrences.single;
+    expect(r.dayOfMonth, 4);
+    expect(r.automatic, isFalse);
+    // Novembre est déjà saisi : rien à confirmer, décembre à venir.
+    expect(store.pendingOccurrences, isEmpty);
+    expect(store.upcomingOccurrences().single.date, DateTime(2026, 12, 4));
+    expect(store.operations, hasLength(1));
+  });
+
+  testWidgets(
+    'nouvelle récurrence, puis confirmer, annuler et ignorer sur l\'Accueil',
+    (tester) async {
+      final store = await pumpApp(tester);
+      await tester.tap(find.byTooltip('Réglages'));
+      await tester.pumpAndSettle();
+      await reveal(tester, 'Opérations récurrentes');
+      await tester.tap(find.text('Opérations récurrentes').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Nouvelle récurrence'));
+      await tester.pumpAndSettle();
+      // D'abord l'opération, avec la saisie habituelle (sans date).
+      expect(find.text('Opération récurrente'), findsOneWidget);
+      expect(find.text('Date'), findsNothing);
+      await type(tester, ['1', '5', '000']);
+      await tester.tap(find.text('Communication'));
+      await tester.pump();
+      await tester.tap(find.text('Enregistrer'));
+      await tester.pumpAndSettle();
+      // Puis le calendrier : le 26 (aujourd'hui), à confirmer.
+      expect(find.text('Rendre récurrente'), findsOneWidget);
+      expect(find.text('le 26 de chaque mois'), findsOneWidget);
+      await reveal(tester, 'Enregistrer');
+      await tester.tap(find.text('Enregistrer').last);
+      await tester.pumpAndSettle();
+      expect(store.recurrences.single.amount, 15000);
+      expect(find.text('le 26 de chaque mois · à confirmer'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Retour'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Retour'));
+      await tester.pumpAndSettle();
+      expect(find.text('À confirmer (1)'), findsOneWidget);
+
+      // Confirmer, puis annuler : l'échéance revient.
+      await tester.tap(find.text('Confirmer'));
+      await tester.pumpAndSettle();
+      expect(store.operations.single.amount, 15000);
+      expect(find.text('À confirmer (1)'), findsNothing);
+      await tester.tap(find.text('Annuler'));
+      await tester.pumpAndSettle();
+      expect(store.operations, isEmpty);
+      expect(find.text('À confirmer (1)'), findsOneWidget);
+
+      // Ignorer : plus rien à confirmer, rien d'enregistré.
+      await tester.tap(find.text('Ignorer'));
+      await tester.pumpAndSettle();
+      expect(store.pendingOccurrences, isEmpty);
+      expect(store.operations, isEmpty);
+      expect(store.walletBalance(DefaultIds.walletCash), 20000);
+    },
+  );
 }

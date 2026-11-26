@@ -29,6 +29,7 @@ class Operation {
     this.sourceWalletId,
     this.targetWalletId,
     this.projectId,
+    this.recurrenceId,
     this.savingsGoalId,
     this.note = '',
     this.visibleToPartner = true,
@@ -53,6 +54,9 @@ class Operation {
   /// Revenu et transfert : portefeuille crédité.
   final String? targetWalletId;
   final String? projectId;
+
+  /// Récurrence qui a produit cette opération (une par mois au plus).
+  final String? recurrenceId;
   final String? savingsGoalId;
   final String note;
   final bool visibleToPartner;
@@ -73,6 +77,7 @@ class Operation {
     String? Function()? targetWalletId,
     String? Function()? savingsGoalId,
     String? Function()? projectId,
+    String? Function()? recurrenceId,
     String? note,
     DateTime? updatedAt,
     bool? deleted,
@@ -90,6 +95,7 @@ class Operation {
         ? targetWalletId()
         : this.targetWalletId,
     projectId: projectId != null ? projectId() : this.projectId,
+    recurrenceId: recurrenceId != null ? recurrenceId() : this.recurrenceId,
     savingsGoalId: savingsGoalId != null ? savingsGoalId() : this.savingsGoalId,
     note: note ?? this.note,
     visibleToPartner: visibleToPartner,
@@ -109,6 +115,7 @@ class Operation {
     'portefeuilleSource': sourceWalletId,
     'portefeuilleCible': targetWalletId,
     'projet': projectId,
+    'recurrence': recurrenceId,
     'objectifEpargne': savingsGoalId,
     'note': note,
     'visibleParAutre': visibleToPartner,
@@ -128,6 +135,7 @@ class Operation {
     sourceWalletId: j['portefeuilleSource'] as String?,
     targetWalletId: j['portefeuilleCible'] as String?,
     projectId: j['projet'] as String?,
+    recurrenceId: j['recurrence'] as String?,
     savingsGoalId: j['objectifEpargne'] as String?,
     note: j['note'] as String? ?? '',
     visibleToPartner: j['visibleParAutre'] as bool? ?? true,

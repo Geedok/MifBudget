@@ -8,6 +8,7 @@ import '../models/wallet.dart';
 import '../state/budget_store.dart';
 import '../theme.dart';
 import 'categories_screen.dart';
+import 'recurrences_screen.dart';
 import 'widgets/amount_keypad.dart';
 import 'widgets/common.dart';
 
@@ -23,6 +24,20 @@ class EntryResult {
   final bool deleted;
 }
 
+/// Usage de l'écran de saisie.
+enum EntryMode {
+  /// Nouvelle opération, ou modification de [QuickEntryScreen.existing].
+  normal,
+
+  /// Confirmer une échéance récurrente : [QuickEntryScreen.existing] est
+  /// l'opération prévue, pas encore enregistrée.
+  confirm,
+
+  /// Définir l'opération type d'une récurrence : rien n'est enregistré,
+  /// l'opération est seulement renvoyée.
+  draft,
+}
+
 /// Saisie rapide : le montant d'abord, puis la catégorie (les plus utilisées
 /// en tête), le portefeuille (le dernier utilisé est présélectionné), et
 /// enfin, si besoin, la date et une note.
@@ -33,10 +48,14 @@ class QuickEntryScreen extends StatefulWidget {
     this.initialType = OperationType.expense,
     this.initialGoalId,
     this.initialWalletId,
+    this.mode = EntryMode.normal,
   });
 
-  /// Opération à modifier ; null pour une nouvelle saisie.
+  /// Opération à modifier (ou à confirmer, ou modèle) ; null pour une
+  /// nouvelle saisie.
   final Operation? existing;
+
+  final EntryMode mode;
 
   /// Type proposé pour une nouvelle saisie.
   final OperationType initialType;
@@ -53,6 +72,7 @@ class QuickEntryScreen extends StatefulWidget {
     OperationType initialType = OperationType.expense,
     String? initialGoalId,
     String? initialWalletId,
+    EntryMode mode = EntryMode.normal,
   }) => Navigator.of(context).push<EntryResult>(
     MaterialPageRoute(
       fullscreenDialog: true,
@@ -61,6 +81,7 @@ class QuickEntryScreen extends StatefulWidget {
         initialType: initialType,
         initialGoalId: initialGoalId,
         initialWalletId: initialWalletId,
+        mode: mode,
       ),
     ),
   );
@@ -85,7 +106,8 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
   bool _saving = false;
   bool _initialized = false;
 
-  bool get _editing => widget.existing != null;
+  bool get _editing =>
+      widget.existing != null && widget.mode == EntryMode.normal;
 
   @override
   void didChangeDependencies() {
@@ -251,7 +273,49 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     final goalId = _type.isSavings ? _goalId : null;
     final projectId = type == OperationType.expense ? _projectId : null;
     final EntryResult result;
-    if (_editing) {
+    if (widget.mode == EntryMode.draft) {
+      final t = store.now();
+      final base =
+          widget.existing ??
+          Operation(
+            id: 'modele',
+            type: type,
+            amount: _amount,
+            date: _date,
+            authorId: store.settings.memberId,
+            createdAt: t,
+            updatedAt: t,
+          );
+      final draft = base.copyWith(
+        type: type,
+        amount: _amount,
+        date: _date,
+        categoryId: () => category,
+        sourceWalletId: () => source,
+        targetWalletId: () => target,
+        savingsGoalId: () => goalId,
+        projectId: () => projectId,
+        note: _note.text.trim(),
+      );
+      if (mounted) Navigator.of(context).pop(EntryResult(draft));
+      return;
+    } else if (widget.mode == EntryMode.confirm) {
+      final e = widget.existing!;
+      final op = await store.addOperation(
+        id: e.id,
+        recurrenceId: e.recurrenceId,
+        type: type,
+        amount: _amount,
+        date: _date,
+        categoryId: category,
+        sourceWalletId: source,
+        targetWalletId: target,
+        savingsGoalId: goalId,
+        projectId: projectId,
+        note: _note.text,
+      );
+      result = EntryResult(op, created: true);
+    } else if (_editing) {
       final updated = widget.existing!.copyWith(
         type: type,
         amount: _amount,
@@ -318,7 +382,12 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     final store = StoreScope.of(context);
     final mif = context.mif;
     final missing = _missing;
-    final title = _editing ? 'Modifier' : 'Nouvelle opération';
+    final title = switch (widget.mode) {
+      EntryMode.confirm => 'Confirmer',
+      EntryMode.draft => 'Opération récurrente',
+      EntryMode.normal => _editing ? 'Modifier' : 'Nouvelle opération',
+    };
+    final recurrence = store.recurrence(widget.existing?.recurrenceId);
 
     return Scaffold(
       appBar: AppBar(
@@ -329,6 +398,15 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         ),
         title: Text(title),
         actions: [
+          if (_editing && recurrence == null)
+            IconButton(
+              icon: const Icon(Icons.repeat),
+              tooltip: 'Rendre récurrente',
+              onPressed: () => RecurrenceFormScreen.open(
+                context,
+                fromOperation: widget.existing,
+              ),
+            ),
           if (_editing)
             IconButton(
               icon: const Icon(Icons.delete_outline),
@@ -428,14 +506,16 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
                       onSelected: (id) => setState(() => _toId = id),
                     ),
                   ],
-                  const SizedBox(height: 12),
-                  _Label('Date'),
-                  _DateChips(
-                    date: _date,
-                    today: dateOnly(store.now()),
-                    onSelected: (d) => setState(() => _date = d),
-                    onOther: _pickDate,
-                  ),
+                  if (widget.mode != EntryMode.draft) ...[
+                    const SizedBox(height: 12),
+                    _Label('Date'),
+                    _DateChips(
+                      date: _date,
+                      today: dateOnly(store.now()),
+                      onSelected: (d) => setState(() => _date = d),
+                      onOther: _pickDate,
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   TextField(
                     controller: _note,
