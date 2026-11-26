@@ -8,6 +8,7 @@ import '../theme.dart';
 import 'home_shell.dart';
 import 'widgets/charts.dart';
 import 'widgets/common.dart';
+import 'trends_view.dart';
 import 'widgets/income_card.dart';
 
 /// Bilan d'un mois : revenus par source, comparaison avec les dépenses et
@@ -21,12 +22,12 @@ class ReportScreen extends StatefulWidget {
 
 class _ReportScreenState extends State<ReportScreen> {
   DateTime? _month;
+  bool _trends = false;
   static const _maxExpenseCategories = 6;
 
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
-    final mif = context.mif;
     final now = store.now();
     final month = _month ?? DateTime(now.year, now.month);
     final previous = DateTime(month.year, month.month - 1);
@@ -45,143 +46,181 @@ class _ReportScreenState extends State<ReportScreen> {
     void setMonth(DateTime m) => setState(() => _month = m);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Bilan du mois')),
+      appBar: AppBar(title: const Text('Rapports')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
         children: [
-          MonthSwitcher(month: month, now: now, onChanged: setMonth),
-          const SizedBox(height: 4),
-          MifCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    _Figure('Revenus', summary.income),
-                    _Figure('Dépenses', summary.expense),
-                    _Figure('Reste', summary.balance),
-                  ],
-                ),
-                if (summary.income > 0 || summary.expense > 0) ...[
-                  const SizedBox(height: 16),
-                  SpentGauge(summary: summary, showRest: false),
-                ],
-                if (summary.saved != 0) ...[
-                  const SizedBox(height: 8),
-                  Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text: summary.saved > 0
-                              ? 'Mis de côté ce mois-ci : '
-                              : "Retiré de l'épargne ce mois-ci : ",
-                        ),
-                        TextSpan(
-                          text: formatFcfa(summary.saved.abs()),
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                    style: TextStyle(fontSize: 13, color: mif.text),
-                  ),
-                ],
-              ],
-            ),
+          SegmentedButton<bool>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: false, label: Text('Bilan du mois')),
+              ButtonSegment(value: true, label: Text('Tendances')),
+            ],
+            selected: {_trends},
+            onSelectionChanged: (v) => setState(() => _trends = v.first),
           ),
-          _Section(
-            title: 'Revenus par source',
-            child: incomes.isEmpty
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Aucun revenu en ${monthName(month)}.',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: mif.textSecondary,
-                        ),
-                      ),
-                      TextButton.icon(
-                        onPressed: () => openEntry(
-                          context,
-                          initialType: OperationType.income,
-                        ),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Saisir un revenu'),
-                      ),
-                    ],
-                  )
-                : Column(
-                    children: [
-                      for (final t in incomes)
-                        _CategoryLine(
-                          total: t,
-                          of: summary.income,
-                          color: mif.chartIncome,
-                          note: deltaLabel(
-                            t.amount,
-                            previousIncomes[t.category?.id] ?? 0,
-                            previous,
-                          ),
-                          showSubs: true,
-                        ),
-                    ],
-                  ),
-          ),
-          _Section(
-            title: 'Revenus et dépenses sur 6 mois',
-            child: IncomeExpenseMonths(
-              months: store.recentMonths(month),
-              selected: month,
-              onSelected: setMonth,
+          const SizedBox(height: 8),
+          if (_trends)
+            TrendsView(
+              onOpenMonth: (m) => setState(() {
+                _month = m;
+                _trends = false;
+              }),
+            )
+          else
+            ..._monthView(
+              context,
+              store,
+              month,
+              now,
+              summary,
+              incomes,
+              previousIncomes,
+              previous,
+              expenses,
+              incomeOps,
+              setMonth,
             ),
-          ),
-          if (expenses.isNotEmpty)
-            _Section(
-              title: 'Dépenses par catégorie',
-              child: Column(
-                children: [
-                  for (final t in expenses.take(_maxExpenseCategories))
-                    _CategoryLine(
-                      total: t,
-                      of: summary.expense,
-                      color: mif.chartExpense,
-                    ),
-                  if (expenses.length > _maxExpenseCategories)
-                    _OthersLine(
-                      amount: expenses
-                          .skip(_maxExpenseCategories)
-                          .fold(0, (s, t) => s + t.amount),
-                      count: expenses.length - _maxExpenseCategories,
-                      of: summary.expense,
-                    ),
-                ],
-              ),
-            ),
-          if (incomeOps.isNotEmpty)
-            _Section(
-              title: 'Détail des revenus',
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Column(
-                children: [
-                  for (final op in incomeOps)
-                    OperationTile(
-                      operation: op,
-                      showDate: true,
-                      onTap: () => openEntry(context, existing: op),
-                    ),
-                ],
-              ),
-            ),
-          const SizedBox(height: 20),
-          Text(
-            "Les tendances sur 12 mois et les projections d'épargne arriveront à l'étape 4.",
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: mif.textSecondary),
-          ),
         ],
       ),
     );
+  }
+
+  List<Widget> _monthView(
+    BuildContext context,
+    BudgetStore store,
+    DateTime month,
+    DateTime now,
+    MonthSummary summary,
+    List<CategoryTotal> incomes,
+    Map<String?, int> previousIncomes,
+    DateTime previous,
+    List<CategoryTotal> expenses,
+    List<Operation> incomeOps,
+    ValueChanged<DateTime> setMonth,
+  ) {
+    final mif = context.mif;
+    return [
+      MonthSwitcher(month: month, now: now, onChanged: setMonth),
+      const SizedBox(height: 4),
+      MifCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _Figure('Revenus', summary.income),
+                _Figure('Dépenses', summary.expense),
+                _Figure('Reste', summary.balance),
+              ],
+            ),
+            if (summary.income > 0 || summary.expense > 0) ...[
+              const SizedBox(height: 16),
+              SpentGauge(summary: summary, showRest: false),
+            ],
+            if (summary.saved != 0) ...[
+              const SizedBox(height: 8),
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: summary.saved > 0
+                          ? 'Mis de côté ce mois-ci : '
+                          : "Retiré de l'épargne ce mois-ci : ",
+                    ),
+                    TextSpan(
+                      text: formatFcfa(summary.saved.abs()),
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+                style: TextStyle(fontSize: 13, color: mif.text),
+              ),
+            ],
+          ],
+        ),
+      ),
+      _Section(
+        title: 'Revenus par source',
+        child: incomes.isEmpty
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Aucun revenu en ${monthName(month)}.',
+                    style: TextStyle(fontSize: 14, color: mif.textSecondary),
+                  ),
+                  TextButton.icon(
+                    onPressed: () =>
+                        openEntry(context, initialType: OperationType.income),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Saisir un revenu'),
+                  ),
+                ],
+              )
+            : Column(
+                children: [
+                  for (final t in incomes)
+                    _CategoryLine(
+                      total: t,
+                      of: summary.income,
+                      color: mif.chartIncome,
+                      note: deltaLabel(
+                        t.amount,
+                        previousIncomes[t.category?.id] ?? 0,
+                        previous,
+                      ),
+                      showSubs: true,
+                    ),
+                ],
+              ),
+      ),
+      _Section(
+        title: 'Revenus et dépenses sur 6 mois',
+        child: IncomeExpenseMonths(
+          months: store.recentMonths(month),
+          selected: month,
+          onSelected: setMonth,
+        ),
+      ),
+      if (expenses.isNotEmpty)
+        _Section(
+          title: 'Dépenses par catégorie',
+          child: Column(
+            children: [
+              for (final t in expenses.take(_maxExpenseCategories))
+                _CategoryLine(
+                  total: t,
+                  of: summary.expense,
+                  color: mif.chartExpense,
+                ),
+              if (expenses.length > _maxExpenseCategories)
+                _OthersLine(
+                  amount: expenses
+                      .skip(_maxExpenseCategories)
+                      .fold(0, (s, t) => s + t.amount),
+                  count: expenses.length - _maxExpenseCategories,
+                  of: summary.expense,
+                ),
+            ],
+          ),
+        ),
+      if (incomeOps.isNotEmpty)
+        _Section(
+          title: 'Détail des revenus',
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            children: [
+              for (final op in incomeOps)
+                OperationTile(
+                  operation: op,
+                  showDate: true,
+                  onTap: () => openEntry(context, existing: op),
+                ),
+            ],
+          ),
+        ),
+    ];
   }
 }
 

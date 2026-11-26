@@ -6,8 +6,10 @@ import 'package:mifbudget/core/format.dart';
 import 'package:mifbudget/data/defaults.dart';
 import 'package:mifbudget/data/repository.dart';
 import 'package:mifbudget/models/operation.dart';
+import 'package:mifbudget/models/project.dart';
 import 'package:mifbudget/models/wallet.dart';
 import 'package:mifbudget/state/budget_store.dart';
+import 'package:mifbudget/ui/quick_entry_screen.dart';
 
 void main() {
   setUpAll(() async {
@@ -328,6 +330,8 @@ void main() {
       expect(store.available, 10000);
 
       // Retirer plus que le compte épargne est refusé.
+      await tester.ensureVisible(find.text('Retirer'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Retirer'));
       await tester.pumpAndSettle();
       await type(tester, ['6', '0', '0', '000']);
@@ -405,5 +409,138 @@ void main() {
     expect(wave.isPrivate, isTrue);
     expect(wave.isSavings, isFalse);
     expect(find.text('Mobile Money · Personnel, privé'), findsOneWidget);
+  });
+
+  testWidgets('tendances, projection et simulateur', (tester) async {
+    final store = await pumpApp(tester);
+    final compte = await store.addWallet(
+      name: 'Compte épargne',
+      type: WalletType.bank,
+      role: WalletRole.savings,
+      openingBalance: 300000,
+    );
+    // Octobre : un mois complet avec revenus, dépenses et épargne.
+    final oct = DateTime(2026, 10, 25);
+    await store.addOperation(
+      type: OperationType.income,
+      amount: 600000,
+      date: oct,
+      categoryId: 'cat-salaires',
+      targetWalletId: DefaultIds.walletBank,
+    );
+    await store.addOperation(
+      type: OperationType.expense,
+      amount: 450000,
+      date: oct,
+      categoryId: 'cat-alimentation',
+      sourceWalletId: DefaultIds.walletBank,
+    );
+    await store.addOperation(
+      type: OperationType.transfer,
+      amount: 100000,
+      date: oct,
+      sourceWalletId: DefaultIds.walletBank,
+      targetWalletId: compte.id,
+    );
+    final g = await store.addGoal(
+      name: 'Sûreté',
+      target: 1000000,
+      walletId: compte.id,
+      icon: 'surete',
+    );
+
+    await tester.tap(find.text('Rapports'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tendances'));
+    await tester.pumpAndSettle();
+    expect(find.text("Capacité d'épargne"), findsOneWidget);
+    expect(find.text('Moyenne par mois, en octobre 2026'), findsOneWidget);
+    expect(
+      find.textContaining(
+        '100${nbsp}000${nbsp}FCFA par mois',
+        findRichText: true,
+      ),
+      findsWidgets,
+    );
+
+    await tester.scrollUntilVisible(
+      find.text('Projections'),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pumpAndSettle();
+    // Il manque 600 000 à 100 000 par mois : 6 mois, novembre compris.
+    expect(find.text('Atteint vers avril 2027'), findsOneWidget);
+
+    // Simulateur dans le détail de l'objectif.
+    await tester.tap(find.text('Épargnes').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sûreté'));
+    await tester.pumpAndSettle();
+    expect(find.text('Simuler'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Si je verse chaque mois'),
+      '200000',
+    );
+    await tester.pump();
+    // 600 000 à 200 000 par mois : 3 mois, novembre compris.
+    expect(
+      find.textContaining(
+        'Cible atteinte vers janvier 2027',
+        findRichText: true,
+      ),
+      findsOneWidget,
+    );
+    expect(store.goalPace(g), 100000);
+  });
+
+  testWidgets('créer un projet et y rattacher une dépense', (tester) async {
+    final store = await pumpApp(tester);
+    await tester.tap(find.text('Épargnes').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Nouveau projet'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Nom'), 'Fondations');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Budget prévu'),
+      '1800000',
+    );
+    await tester.tap(find.text('En cours'));
+    await tester.pump();
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    final p = store.projects.single;
+    expect(p.status, ProjectStatus.active);
+    expect(
+      find.text('Reste à financer 1${nbsp}800${nbsp}000${nbsp}FCFA'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byTooltip('Ajouter une opération'));
+    await tester.pumpAndSettle();
+    await type(tester, ['5', '0', '0', '000']);
+    await tester.tap(find.text('Logement'));
+    await tester.pump();
+    await tester.scrollUntilVisible(
+      find.text('Projet (facultatif)'),
+      100,
+      scrollable: find
+          .descendant(
+            of: find.byType(QuickEntryScreen),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    // Le nom du projet figure aussi dans l'onglet Épargnes, sous la saisie.
+    final chip = find.text('Fondations').last;
+    await tester.ensureVisible(chip);
+    await tester.pumpAndSettle();
+    await tester.tap(chip);
+    await tester.pump();
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(store.operations.single.projectId, p.id);
+    expect(store.projectSpent(p.id), 500000);
+    expect(store.projectToFund(p), 1300000);
   });
 }

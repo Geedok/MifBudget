@@ -72,6 +72,7 @@ class Operation {
     String? Function()? sourceWalletId,
     String? Function()? targetWalletId,
     String? Function()? savingsGoalId,
+    String? Function()? projectId,
     String? note,
     DateTime? updatedAt,
     bool? deleted,
@@ -88,7 +89,7 @@ class Operation {
     targetWalletId: targetWalletId != null
         ? targetWalletId()
         : this.targetWalletId,
-    projectId: projectId,
+    projectId: projectId != null ? projectId() : this.projectId,
     savingsGoalId: savingsGoalId != null ? savingsGoalId() : this.savingsGoalId,
     note: note ?? this.note,
     visibleToPartner: visibleToPartner,

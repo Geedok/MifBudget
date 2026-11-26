@@ -1,14 +1,17 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../core/format.dart';
+import '../core/projection.dart';
 import '../models/operation.dart';
 import '../models/savings_goal.dart';
 import '../models/wallet.dart';
 import '../state/budget_store.dart';
 import '../theme.dart';
 import 'goal_form_screen.dart';
+import 'projects.dart';
 import 'wallet_form_screen.dart';
 import 'home_shell.dart';
+import 'widgets/amount_field.dart';
 import 'widgets/charts.dart';
 import 'widgets/common.dart';
 
@@ -25,7 +28,7 @@ class SavingsScreen extends StatelessWidget {
     final month = store.monthSummary(store.now());
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Épargnes')),
+      appBar: AppBar(title: const Text('Épargnes et projets')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
         children: [
@@ -81,6 +84,7 @@ class SavingsScreen extends StatelessWidget {
               label: const Text('Ajouter un compte épargne'),
             ),
           ],
+          const _ProjectsSection(),
         ],
       ),
     );
@@ -407,6 +411,16 @@ class GoalCard extends StatelessWidget {
                   '${perMonth == null ? '' : ' · ${formatFcfa(perMonth)} par mois'}',
       );
     }
+    if (!reached && goal.target > 0) {
+      final pace = store.goalPace(goal);
+      final reach = store.goalReachDate(goal);
+      notes.add(
+        reach == null
+            ? "Au rythme actuel, l'objectif n'avance pas"
+            : 'Au rythme actuel (${formatFcfa(pace)} par mois) : '
+                  'atteint vers ${monthLabel(reach).toLowerCase()}',
+      );
+    }
     if (goal.icon == 'surete') {
       final avg = store.averageMonthlyExpense();
       if (avg > 0 && balance > 0) {
@@ -559,6 +573,13 @@ class GoalDetailScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: [
           GoalCard(goal: goal),
+          if (store.goalBalance(goal.id) < goal.target) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
+              child: SectionTitle('Simuler'),
+            ),
+            _Simulator(goal: goal),
+          ],
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
             child: SectionTitle('Historique'),
@@ -608,6 +629,147 @@ class GoalDetailScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// « Si je verse X par mois » : date à laquelle la cible serait atteinte.
+class _Simulator extends StatefulWidget {
+  const _Simulator({required this.goal});
+
+  final SavingsGoal goal;
+
+  @override
+  State<_Simulator> createState() => _SimulatorState();
+}
+
+class _SimulatorState extends State<_Simulator> {
+  late final TextEditingController _amount;
+
+  @override
+  void initState() {
+    super.initState();
+    _amount = TextEditingController();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_amount.text.isEmpty) {
+      // Point de départ : le rythme actuel, sinon le versement nécessaire
+      // pour la date cible.
+      final store = StoreScope.read(context);
+      final start = store.goalPace(widget.goal) > 0
+          ? store.goalPace(widget.goal)
+          : store.monthlyNeeded(widget.goal) ?? 0;
+      if (start > 0) _amount.text = formatAmount(start);
+    }
+  }
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final mif = context.mif;
+    final goal = widget.goal;
+    final remaining = goal.target - store.goalBalance(goal.id);
+    return MifCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AmountField(controller: _amount, label: 'Si je verse chaque mois'),
+          const SizedBox(height: 12),
+          ListenableBuilder(
+            listenable: _amount,
+            builder: (context, _) {
+              final perMonth = parseAmount(_amount.text) ?? 0;
+              final months = monthsToReach(remaining, perMonth);
+              final date = reachDate(store.now(), remaining, perMonth);
+              if (months == null || date == null) {
+                return Text(
+                  'Saisissez un montant mensuel pour voir quand la cible '
+                  'serait atteinte.',
+                  style: TextStyle(fontSize: 14, color: mif.textSecondary),
+                );
+              }
+              final target = goal.targetDate;
+              final versus = target == null
+                  ? ''
+                  : switch (monthsBetween(date, target)) {
+                      0 => ', juste à la date cible',
+                      > 0 && final d => ', $d mois avant la date cible',
+                      final d => ', ${-d} mois après la date cible',
+                    };
+              return Text.rich(
+                TextSpan(
+                  children: [
+                    const TextSpan(text: 'Cible atteinte vers '),
+                    TextSpan(
+                      text: monthLabel(date).toLowerCase(),
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    TextSpan(text: ' ($months mois$versus).'),
+                  ],
+                ),
+                style: TextStyle(fontSize: 14, color: mif.text),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Projets du foyer, sous les comptes épargne.
+class _ProjectsSection extends StatelessWidget {
+  const _ProjectsSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final mif = context.mif;
+    final projects = store.projects;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 28, 0, 8),
+          child: SectionTitle(
+            'Projets',
+            trailing: TextButton.icon(
+              onPressed: () => ProjectFormScreen.open(context),
+              icon: const Icon(Icons.add),
+              label: const Text('Nouveau projet'),
+            ),
+          ),
+        ),
+        if (projects.isEmpty)
+          MifCard(
+            child: Text(
+              'Planifiez vos projets (fondations, rentrée, voyage…) : un '
+              "budget, les dépenses déjà faites, et la date à laquelle "
+              "l'épargne qui le finance sera suffisante.",
+              style: TextStyle(fontSize: 14, color: mif.textSecondary),
+            ),
+          ),
+        for (final (i, p) in projects.indexed) ...[
+          if (i > 0) const SizedBox(height: 12),
+          ProjectCard(
+            project: p,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ProjectDetailScreen(projectId: p.id),
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

@@ -215,6 +215,20 @@ ThemeData buildTheme(Brightness brightness) {
         borderSide: BorderSide(color: c.green, width: 2),
       ),
     ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? c.greenSoft
+              : Colors.transparent,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) =>
+              states.contains(WidgetState.selected) ? c.text : c.textSecondary,
+        ),
+        side: WidgetStatePropertyAll(BorderSide(color: c.border)),
+      ),
+    ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

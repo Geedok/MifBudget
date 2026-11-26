@@ -13,6 +13,7 @@ import 'package:mifbudget/data/defaults.dart';
 import 'package:mifbudget/data/repository.dart';
 import 'package:mifbudget/models/operation.dart';
 import 'package:mifbudget/models/settings.dart';
+import 'package:mifbudget/models/project.dart';
 import 'package:mifbudget/models/wallet.dart';
 import 'package:mifbudget/state/budget_store.dart';
 
@@ -221,6 +222,33 @@ void main() {
         startAmount: 2200000,
         icon: 'construction',
       );
+      // Épargne des mois précédents (le rythme des projections).
+      for (final m in [8, 9, 10]) {
+        await store.addOperation(
+          type: OperationType.transfer,
+          amount: 150000,
+          date: DateTime(2026, m, 26),
+          savingsGoalId: construction.id,
+          sourceWalletId: DefaultIds.walletBank,
+          targetWalletId: compte.id,
+        );
+      }
+      final fondations = await store.addProject(
+        name: 'Fondations',
+        budget: 1800000,
+        targetDate: DateTime(2027, 6),
+        goalId: construction.id,
+        status: ProjectStatus.active,
+      );
+      await store.addOperation(
+        type: OperationType.expense,
+        amount: 350000,
+        date: clock.subtract(const Duration(days: 8)),
+        categoryId: 'cat-maison',
+        sourceWalletId: DefaultIds.walletBank,
+        projectId: fondations.id,
+        note: 'Ciment et fer',
+      );
       for (final (g, a) in [(surete, 100000), (construction, 200000)]) {
         await store.addOperation(
           type: OperationType.transfer,
@@ -266,6 +294,23 @@ void main() {
       await shot(tester, '4-bilan-$suffix');
       await tester.drag(find.byType(Scrollable).last, const Offset(0, -520));
       await shot(tester, '4b-bilan-6mois-$suffix');
+      await tester.drag(find.byType(Scrollable).last, const Offset(0, 3000));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Tendances'));
+      await shot(tester, '7-tendances-$suffix');
+      await tester.drag(find.byType(Scrollable).last, const Offset(0, -1700));
+      await shot(tester, '7b-tendances-projections-$suffix');
+
+      await tester.tap(find.text('Épargnes').last);
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(Scrollable).last, const Offset(0, -1500));
+      await shot(tester, '8-projets-$suffix');
+      await tester.ensureVisible(find.text('Épargne de construction').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Épargne de construction').first);
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(Scrollable).last, const Offset(0, -420));
+      await shot(tester, '9-simulateur-$suffix');
     });
   }
 }

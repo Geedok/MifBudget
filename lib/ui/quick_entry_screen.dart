@@ -76,6 +76,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
   String? _categoryId;
   String? _walletId; // dépense : débité ; revenu : crédité ; épargne : lieu
   String? _goalId; // épargne
+  String? _projectId; // dépense rattachée à un projet
   String? _fromId; // transfert
   String? _toId; // transfert
   late DateTime _date;
@@ -99,6 +100,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       _date = e.date;
       _note.text = e.note;
       _goalId = e.savingsGoalId;
+      _projectId = e.projectId;
       if (e.type == OperationType.transfer) {
         _fromId = e.sourceWalletId;
         _toId = e.targetWalletId;
@@ -246,6 +248,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     final target = isTransfer ? _toId : (incoming ? _walletId : null);
     final category = isTransfer ? null : _categoryId;
     final goalId = _type.isSavings ? _goalId : null;
+    final projectId = type == OperationType.expense ? _projectId : null;
     final EntryResult result;
     if (_editing) {
       final updated = widget.existing!.copyWith(
@@ -256,6 +259,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         sourceWalletId: () => source,
         targetWalletId: () => target,
         savingsGoalId: () => goalId,
+        projectId: () => projectId,
         note: _note.text.trim(),
       );
       await store.updateOperation(updated);
@@ -269,6 +273,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         sourceWalletId: source,
         targetWalletId: target,
         savingsGoalId: goalId,
+        projectId: projectId,
         note: _note.text,
       );
       result = EntryResult(op, created: true);
@@ -385,6 +390,28 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
                       selectedId: _walletId,
                       onSelected: (id) => setState(() => _walletId = id),
                     ),
+                    if (_type == OperationType.expense &&
+                        store.openProjects.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      _Label('Projet (facultatif)'),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          for (final p in store.openProjects)
+                            _Chip(
+                              label: p.name,
+                              selected: p.id == _projectId,
+                              // Toucher à nouveau retire le projet.
+                              onTap: () => setState(
+                                () => _projectId = p.id == _projectId
+                                    ? null
+                                    : p.id,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
                   ] else ...[
                     _Label('De'),
                     _WalletChips(

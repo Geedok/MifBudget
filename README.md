@@ -24,7 +24,12 @@ Application Android de budget familial (Flutter). Voir `CLAUDE.md` pour le cahie
 - Onglet Épargnes : total épargné, épargne du mois, puis chaque compte avec ses objectifs (progression, reste, versement mensuel pour la date cible, mois de dépenses couverts pour la sûreté).
 - Les épargnes saisies en 0.3.0 sont reprises automatiquement dans un « Compte épargne ».
 
-Étape suivante : 4. statistiques et projections.
+**Étape 4 : statistiques et projections** (version 0.5.0)
+- Rapports → « Tendances » : capacité d'épargne (revenus, dépenses et épargne moyens des 3 derniers mois complets, taux d'épargne, reste après dépenses), revenus et dépenses sur 12 mois, épargne mois par mois, dépenses moyennes par catégorie comparées aux 3 mois d'avant, projections des objectifs et des projets.
+- Objectifs : date estimée au rythme actuel (sur la carte) et simulateur « Si je verse chaque mois… » dans le détail.
+- Projets (onglet Épargnes et projets) : budget, mois prévu, objectif d'épargne qui le finance, état (prévu, en cours, terminé) ; dépenses rattachées depuis la saisie rapide ; reste à financer et date estimée.
+
+Suite possible : budgets mensuels par catégorie, opérations récurrentes, argent personnel, synchronisation Firebase entre les deux téléphones.
 
 ## Développement
 

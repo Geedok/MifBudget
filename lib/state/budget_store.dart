@@ -2,10 +2,12 @@ import 'package:material_ui/material_ui.dart';
 import 'package:uuid/uuid.dart';
 
 import '../core/format.dart';
+import '../core/projection.dart';
 import '../data/defaults.dart';
 import '../data/repository.dart';
 import '../models/category.dart';
 import '../models/operation.dart';
+import '../models/project.dart';
 import '../models/savings_goal.dart';
 import '../models/settings.dart';
 import '../models/wallet.dart';
@@ -29,6 +31,48 @@ class MonthSummary {
 
   /// Part des revenus déjà dépensée (0 si aucun revenu).
   double get spentRatio => income == 0 ? 0 : expense / income;
+}
+
+/// Moyennes mensuelles sur les derniers mois complets.
+class MonthlyAverages {
+  const MonthlyAverages({
+    required this.income,
+    required this.expense,
+    required this.saved,
+    required this.months,
+  });
+
+  final int income;
+  final int expense;
+
+  /// Capacité d'épargne réelle : ce qui part vers les comptes épargne.
+  final int saved;
+
+  /// Nombre de mois pris en compte (0 : pas encore de mois complet).
+  final int months;
+
+  /// Ce qui reste en moyenne après les dépenses (épargne possible).
+  int get leftover => income - expense;
+
+  /// Part des revenus mise de côté.
+  double get savingsRate => income == 0 ? 0 : saved / income;
+}
+
+/// Dépense (ou revenu) moyenne d'une catégorie sur les derniers mois,
+/// comparée à la période précédente de même durée.
+class CategoryTrend {
+  const CategoryTrend({
+    required this.category,
+    required this.recent,
+    required this.previous,
+  });
+
+  final Category? category;
+  final int recent;
+  final int previous;
+
+  /// Évolution relative (null si rien sur la période précédente).
+  double? get change => previous == 0 ? null : (recent - previous) / previous;
 }
 
 /// Total d'une catégorie principale sur un mois, avec le détail par
@@ -367,6 +411,184 @@ class BudgetStore extends ChangeNotifier {
     await _repo.upsertGoal(updated);
   }
 
+  // ------------------------------------------------- Tendances et projections
+
+  /// Premier mois où une opération a été saisie (les mois d'avant ne
+  /// comptent pas dans les moyennes).
+  DateTime? get firstActivityMonth {
+    DateTime? first;
+    for (final o in operations) {
+      if (first == null || o.date.isBefore(first)) first = o.date;
+    }
+    return first == null ? null : DateTime(first.year, first.month);
+  }
+
+  /// Les [count] derniers mois complets (avant le mois en cours) depuis le
+  /// début de l'utilisation, du plus ancien au plus récent.
+  List<DateTime> lastCompleteMonths(int count) {
+    final t = now();
+    final start = firstActivityMonth;
+    if (start == null) return const [];
+    return [for (var i = count; i >= 1; i--) DateTime(t.year, t.month - i)]
+        .where((m) => !m.isBefore(start))
+        .toList();
+  }
+
+  /// Moyennes des [months] derniers mois complets.
+  MonthlyAverages averages({int months = 3}) {
+    final list = lastCompleteMonths(months).map(monthSummary).toList();
+    return MonthlyAverages(
+      income: average(list.map((m) => m.income)),
+      expense: average(list.map((m) => m.expense)),
+      saved: average(list.map((m) => m.saved)),
+      months: list.length,
+    );
+  }
+
+  /// Ce qui est entré sur un objectif pendant un mois, moins ce qui en est
+  /// sorti (tout le compte s'il y est seul, sinon les mouvements marqués).
+  int goalFlowInMonth(SavingsGoal g, DateTime month) {
+    final walletId = g.walletId;
+    final sole = walletId != null && walletGoals(walletId).length == 1;
+    var flow = 0;
+    for (final o in operationsInMonth(month)) {
+      if (o.type.isSavings) continue;
+      if (!sole && o.savingsGoalId != g.id) continue;
+      if (o.targetWalletId == walletId) flow += o.amount;
+      if (o.sourceWalletId == walletId) flow -= o.amount;
+    }
+    return flow;
+  }
+
+  /// Rythme d'épargne d'un objectif : moyenne mensuelle des 3 derniers mois
+  /// complets, ou le mois en cours s'il n'y en a pas encore.
+  int goalPace(SavingsGoal g, {int months = 3}) {
+    final list = lastCompleteMonths(months);
+    if (list.isEmpty) return goalFlowInMonth(g, now());
+    return average(list.map((m) => goalFlowInMonth(g, m)));
+  }
+
+  /// Mois où la cible sera atteinte au rythme actuel (null si l'objectif
+  /// n'avance pas ; le mois en cours si c'est déjà atteint).
+  DateTime? goalReachDate(SavingsGoal g) =>
+      reachDate(now(), g.target - goalBalance(g.id), goalPace(g));
+
+  /// Moyenne mensuelle par catégorie sur les [months] derniers mois
+  /// complets, comparée aux [months] mois d'avant.
+  List<CategoryTrend> categoryTrends(CategoryKind kind, {int months = 3}) {
+    final recent = lastCompleteMonths(months);
+    if (recent.isEmpty) return const [];
+    final t = now();
+    final start = firstActivityMonth!;
+    final before = [
+      for (var i = 2 * months; i > months; i--) DateTime(t.year, t.month - i),
+    ].where((m) => !m.isBefore(start)).toList();
+    Map<String?, int> totals(List<DateTime> ms) {
+      final map = <String?, int>{};
+      for (final m in ms) {
+        for (final c in totalsByCategory(m, kind)) {
+          map[c.category?.id] = (map[c.category?.id] ?? 0) + c.amount;
+        }
+      }
+      return map;
+    }
+
+    final r = totals(recent);
+    final p = totals(before);
+    return [
+      for (final id in {...r.keys, ...p.keys})
+        CategoryTrend(
+          category: category(id),
+          recent: ((r[id] ?? 0) / recent.length).round(),
+          previous: before.isEmpty ? 0 : ((p[id] ?? 0) / before.length).round(),
+        ),
+    ]..sort((a, b) => b.recent.compareTo(a.recent));
+  }
+
+  // ----------------------------------------------------------------- Projets
+
+  /// Projets non archivés : en cours, puis prévus, puis terminés.
+  List<Project> get projects =>
+      _data.projects.where((p) => !p.archived).toList()..sort((a, b) {
+        int rank(Project p) => switch (p.status) {
+          ProjectStatus.active => 0,
+          ProjectStatus.planned => 1,
+          ProjectStatus.done => 2,
+        };
+        final byStatus = rank(a).compareTo(rank(b));
+        return byStatus != 0 ? byStatus : a.sortOrder.compareTo(b.sortOrder);
+      });
+
+  /// Projets auxquels on peut rattacher une dépense.
+  List<Project> get openProjects =>
+      projects.where((p) => p.status != ProjectStatus.done).toList();
+
+  Project? project(String? id) {
+    for (final p in _data.projects) {
+      if (p.id == id) return p;
+    }
+    return null;
+  }
+
+  List<Operation> projectOperations(String projectId) =>
+      operations.where((o) => o.projectId == projectId).toList();
+
+  /// Dépenses rattachées au projet.
+  int projectSpent(String projectId) =>
+      projectOperations(projectId)
+          .where((o) => o.type == OperationType.expense)
+          .fold(0, (sum, o) => sum + o.amount);
+
+  /// Ce qui manque encore pour financer le projet : budget − déjà dépensé −
+  /// épargne de l'objectif qui le finance.
+  int projectToFund(Project p) {
+    final saved = p.goalId == null ? 0 : goalBalance(p.goalId!);
+    final missing = p.budget - projectSpent(p.id) - saved;
+    return missing < 0 ? 0 : missing;
+  }
+
+  /// Mois où le projet sera financé au rythme de son objectif d'épargne.
+  DateTime? projectFundingDate(Project p) {
+    final g = goal(p.goalId);
+    if (g == null) return null;
+    return reachDate(now(), projectToFund(p), goalPace(g));
+  }
+
+  Future<Project> addProject({
+    required String name,
+    required int budget,
+    DateTime? targetDate,
+    String? goalId,
+    ProjectStatus status = ProjectStatus.planned,
+  }) async {
+    final t = now();
+    final p = Project(
+      id: _uuid.v4(),
+      name: name.trim(),
+      budget: budget,
+      targetDate: targetDate == null
+          ? null
+          : DateTime(targetDate.year, targetDate.month),
+      goalId: goalId,
+      status: status,
+      sortOrder: _data.projects.length,
+      createdAt: t,
+      updatedAt: t,
+    );
+    _data.projects.add(p);
+    notifyListeners();
+    await _repo.upsertProject(p);
+    return p;
+  }
+
+  Future<void> updateProject(Project p) async {
+    final updated = p.copyWith(updatedAt: now());
+    final i = _data.projects.indexWhere((x) => x.id == p.id);
+    if (i >= 0) _data.projects[i] = updated;
+    notifyListeners();
+    await _repo.upsertProject(updated);
+  }
+
   Future<SavingsGoal> addGoal({
     required String name,
     required int target,
@@ -567,6 +789,7 @@ class BudgetStore extends ChangeNotifier {
     String? sourceWalletId,
     String? targetWalletId,
     String? savingsGoalId,
+    String? projectId,
     String note = '',
   }) async {
     final t = now();
@@ -579,6 +802,7 @@ class BudgetStore extends ChangeNotifier {
       sourceWalletId: sourceWalletId,
       targetWalletId: targetWalletId,
       savingsGoalId: savingsGoalId,
+      projectId: projectId,
       note: note.trim(),
       authorId: settings.memberId,
       createdAt: t,
