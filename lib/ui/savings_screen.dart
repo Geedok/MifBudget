@@ -3,15 +3,17 @@ import 'package:material_ui/material_ui.dart';
 import '../core/format.dart';
 import '../models/operation.dart';
 import '../models/savings_goal.dart';
+import '../models/wallet.dart';
 import '../state/budget_store.dart';
 import '../theme.dart';
 import 'goal_form_screen.dart';
+import 'wallet_form_screen.dart';
 import 'home_shell.dart';
 import 'widgets/charts.dart';
 import 'widgets/common.dart';
 
-/// Onglet Épargnes : total mis de côté, puis une carte par épargne avec sa
-/// progression et les boutons Verser / Retirer.
+/// Onglet Épargnes : le total des comptes épargne, puis chaque compte avec
+/// ses objectifs (progression, Verser / Retirer) et sa part non répartie.
 class SavingsScreen extends StatelessWidget {
   const SavingsScreen({super.key});
 
@@ -19,35 +21,23 @@ class SavingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
     final mif = context.mif;
-    final goals = store.goals;
-    final now = store.now();
-    final month = store.monthSummary(now);
-    final totalTarget = goals.fold(0, (s, g) => s + g.target);
+    final accounts = store.savingsWallets;
+    final month = store.monthSummary(store.now());
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Épargnes'),
-        actions: [
-          TextButton.icon(
-            onPressed: () => GoalFormScreen.open(context),
-            icon: const Icon(Icons.add),
-            label: const Text('Nouvelle'),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Épargnes')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
         children: [
-          if (goals.isEmpty)
-            const _EmptySavings()
+          if (accounts.isEmpty)
+            const _NoSavingsAccount()
           else ...[
             MifCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Mis de côté',
+                    'Total épargné',
                     style: TextStyle(fontSize: 13, color: mif.textSecondary),
                   ),
                   const SizedBox(height: 2),
@@ -59,30 +49,17 @@ class SavingsScreen extends StatelessWidget {
                       color: mif.text,
                     ),
                   ),
-                  if (totalTarget > 0) ...[
-                    Text(
-                      'sur des cibles de ${formatFcfa(totalTarget)}',
-                      style: TextStyle(fontSize: 13, color: mif.textSecondary),
-                    ),
-                    const SizedBox(height: 8),
-                    ValueBar(
-                      fraction: store.totalSaved / totalTarget,
-                      color: mif.green,
-                      height: 8,
-                      track: true,
-                    ),
-                  ],
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       _Figure(
-                        label: 'Ce mois-ci',
+                        label: 'Mis de côté ce mois-ci',
                         value: month.saved == 0
                             ? '0'
                             : formatSigned(month.saved),
                       ),
                       _Figure(
-                        label: 'Disponible hors épargne',
+                        label: 'Disponible (comptes courants)',
                         value: formatAmount(store.available),
                       ),
                     ],
@@ -90,17 +67,19 @@ class SavingsScreen extends StatelessWidget {
                 ],
               ),
             ),
-            for (final g in goals) ...[
-              const SizedBox(height: 12),
-              GoalCard(
-                goal: g,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => GoalDetailScreen(goalId: g.id),
-                  ),
-                ),
+            for (final w in accounts) _AccountSection(wallet: w),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
               ),
-            ],
+              onPressed: () => WalletFormScreen.open(
+                context,
+                initialRole: WalletRole.savings,
+              ),
+              icon: const Icon(Icons.add),
+              label: const Text('Ajouter un compte épargne'),
+            ),
           ],
         ],
       ),
@@ -137,35 +116,19 @@ class _Figure extends StatelessWidget {
   );
 }
 
-/// Premier passage : proposer les deux épargnes prévues.
-class _EmptySavings extends StatelessWidget {
-  const _EmptySavings();
+/// Aucun compte épargne : expliquer et proposer d'en ajouter un.
+class _NoSavingsAccount extends StatelessWidget {
+  const _NoSavingsAccount();
 
   @override
   Widget build(BuildContext context) {
     final mif = context.mif;
-    Widget suggestion(String name, String icon) => Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: OutlinedButton.icon(
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size.fromHeight(48),
-          alignment: Alignment.centerLeft,
-        ),
-        onPressed: () => GoalFormScreen.open(
-          context,
-          suggestedName: name,
-          suggestedIcon: icon,
-        ),
-        icon: Icon(goalIcon(icon)),
-        label: Text(name),
-      ),
-    );
     return MifCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Créez vos épargnes',
+            'Ajoutez votre compte épargne',
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w600,
@@ -174,17 +137,233 @@ class _EmptySavings extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            "Une épargne met de l'argent de côté sans le sortir du portefeuille : "
-            "il n'est simplement plus compté dans le disponible. "
-            'Donnez-lui un montant cible et, si vous voulez, une date.',
+            "Épargner, c'est virer de l'argent d'un compte courant vers un "
+            'compte épargne. Ajoutez le compte où va votre épargne, puis vos '
+            'objectifs (sûreté, construction…) : sur un même compte ou sur '
+            'des comptes différents.',
             style: TextStyle(fontSize: 14, color: mif.textSecondary),
           ),
-          const SizedBox(height: 8),
-          suggestion('Épargne de sûreté', 'surete'),
-          suggestion('Épargne de construction', 'construction'),
-          suggestion('Autre épargne', 'epargne'),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: () =>
+                WalletFormScreen.open(context, initialRole: WalletRole.savings),
+            icon: const Icon(Icons.add),
+            label: const Text('Ajouter un compte épargne'),
+          ),
         ],
       ),
+    );
+  }
+}
+
+/// Un compte épargne : son solde, ses objectifs et la part non répartie.
+class _AccountSection extends StatelessWidget {
+  const _AccountSection({required this.wallet});
+
+  final Wallet wallet;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final mif = context.mif;
+    final goals = store.walletGoals(wallet.id);
+    final unallocated = store.unallocated(wallet.id);
+    Widget suggestion(String name, String icon) => ActionChip(
+      avatar: Icon(goalIcon(icon), size: 18),
+      label: Text(name),
+      onPressed: () => GoalFormScreen.open(
+        context,
+        suggestedName: name,
+        suggestedIcon: icon,
+        walletId: wallet.id,
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 24, 0, 8),
+          child: Row(
+            children: [
+              Icon(walletIcon(wallet.type), size: 20, color: mif.textSecondary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  wallet.name,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: mif.text,
+                  ),
+                ),
+              ),
+              if (wallet.isPrivate)
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: Icon(
+                    Icons.lock_outline,
+                    size: 16,
+                    semanticLabel: 'Privé',
+                    color: mif.textSecondary,
+                  ),
+                ),
+              Text(
+                formatFcfa(store.walletBalance(wallet.id)),
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: mif.text,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Modifier le compte',
+                icon: const Icon(Icons.edit_outlined, size: 20),
+                onPressed: () =>
+                    WalletFormScreen.open(context, existing: wallet),
+              ),
+            ],
+          ),
+        ),
+        if (goals.isEmpty)
+          MifCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Aucun objectif sur ce compte. Ajoutez-en un pour suivre "
+                  'la progression vers une cible :',
+                  style: TextStyle(fontSize: 14, color: mif.textSecondary),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    suggestion('Épargne de sûreté', 'surete'),
+                    suggestion('Épargne de construction', 'construction'),
+                    suggestion('Autre objectif', 'epargne'),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                _MoveButtons(walletId: wallet.id),
+              ],
+            ),
+          ),
+        for (final (i, g) in goals.indexed) ...[
+          if (i > 0) const SizedBox(height: 12),
+          GoalCard(
+            goal: g,
+            showWallet: false,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => GoalDetailScreen(goalId: g.id)),
+            ),
+          ),
+        ],
+        if (goals.length > 1 && unallocated != 0) ...[
+          const SizedBox(height: 12),
+          MifCard(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Non réparti',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: mif.text,
+                        ),
+                      ),
+                      Text(
+                        "Argent du compte qui n'est attribué à aucun objectif.",
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: mif.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  formatAmount(unallocated),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: mif.text,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (goals.isNotEmpty)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () =>
+                  GoalFormScreen.open(context, walletId: wallet.id),
+              icon: const Icon(Icons.add),
+              label: const Text('Ajouter un objectif sur ce compte'),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Verser / Retirer, depuis un compte épargne ou un objectif.
+class _MoveButtons extends StatelessWidget {
+  const _MoveButtons({required this.walletId, this.goalId, this.canWithdraw});
+
+  final String walletId;
+  final String? goalId;
+  final bool? canWithdraw;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final withdraw = canWithdraw ?? store.walletBalance(walletId) > 0;
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(12),
+    );
+    return Row(
+      children: [
+        Expanded(
+          child: FilledButton(
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(44),
+              shape: shape,
+            ),
+            onPressed: () => openEntry(
+              context,
+              initialType: OperationType.savingsDeposit,
+              initialGoalId: goalId,
+              initialWalletId: walletId,
+            ),
+            child: const Text('Verser'),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(44),
+              shape: shape,
+            ),
+            onPressed: withdraw
+                ? () => openEntry(
+                    context,
+                    initialType: OperationType.savingsWithdrawal,
+                    initialGoalId: goalId,
+                    initialWalletId: walletId,
+                  )
+                : null,
+            child: const Text('Retirer'),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -192,10 +371,18 @@ class _EmptySavings extends StatelessWidget {
 /// Carte d'une épargne : montant / cible, progression, conseils, et les
 /// boutons Verser / Retirer.
 class GoalCard extends StatelessWidget {
-  const GoalCard({super.key, required this.goal, this.onTap});
+  const GoalCard({
+    super.key,
+    required this.goal,
+    this.onTap,
+    this.showWallet = true,
+  });
 
   final SavingsGoal goal;
   final VoidCallback? onTap;
+
+  /// Rappeler le compte épargne (inutile sous l'en-tête du compte).
+  final bool showWallet;
 
   @override
   Widget build(BuildContext context) {
@@ -228,7 +415,7 @@ class GoalCard extends StatelessWidget {
       }
     }
     final wallet = store.wallet(goal.walletId);
-    if (wallet != null) notes.add('Sur ${wallet.name}');
+    if (wallet != null && showWallet) notes.add('Sur ${wallet.name}');
 
     return Material(
       color: mif.card,
@@ -325,45 +512,12 @@ class GoalCard extends StatelessWidget {
                   ),
                 ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(44),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () => openEntry(
-                        context,
-                        initialType: OperationType.savingsDeposit,
-                        initialGoalId: goal.id,
-                      ),
-                      child: const Text('Verser'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(44),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: balance <= 0
-                          ? null
-                          : () => openEntry(
-                              context,
-                              initialType: OperationType.savingsWithdrawal,
-                              initialGoalId: goal.id,
-                            ),
-                      child: const Text('Retirer'),
-                    ),
-                  ),
-                ],
-              ),
+              if (goal.walletId != null)
+                _MoveButtons(
+                  walletId: goal.walletId!,
+                  goalId: goal.id,
+                  canWithdraw: balance > 0,
+                ),
             ],
           ),
         ),
@@ -420,14 +574,16 @@ class GoalDetailScreen extends StatelessWidget {
                     showDate: true,
                     onTap: () => openEntry(context, existing: op),
                   ),
-                if (goal.startAmount > 0)
+                if (goal.startAmount != 0 &&
+                    goal.walletId != null &&
+                    store.walletGoals(goal.walletId!).length > 1)
                   ListTile(
                     leading: CategoryBadge(
                       category: null,
                       icon: goalIcon(goal.icon),
                       color: mif.green,
                     ),
-                    title: const Text('Montant de départ'),
+                    title: const Text('Part de départ'),
                     subtitle: Text(
                       'À la création, ${dayLabel(goal.createdAt, now: store.now()).toLowerCase()}',
                     ),
@@ -439,7 +595,7 @@ class GoalDetailScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                if (ops.isEmpty && goal.startAmount == 0)
+                if (ops.isEmpty)
                   Padding(
                     padding: const EdgeInsets.all(16),
                     child: Text(

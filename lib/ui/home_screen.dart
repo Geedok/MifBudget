@@ -1,10 +1,12 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../core/format.dart';
+import '../models/wallet.dart';
 import '../state/budget_store.dart';
 import '../theme.dart';
 import 'home_shell.dart';
 import 'settings_screen.dart';
+import 'wallet_form_screen.dart';
 import 'widgets/charts.dart';
 import 'widgets/common.dart';
 import 'widgets/income_card.dart';
@@ -114,22 +116,11 @@ class HomeScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (store.available < 0) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'Plus d\'argent mis de côté que dans les portefeuilles : '
-                      'vérifiez les soldes de départ dans les Réglages.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: onGreen.withValues(alpha: 0.9),
-                      ),
-                    ),
-                  ],
                   const SizedBox(height: 14),
                   Row(
                     children: [
-                      _Figure('Portefeuilles', store.totalBalance, onGreen),
-                      _Figure('Mis de côté', store.totalSaved, onGreen),
+                      _Figure('Épargne', store.totalSaved, onGreen),
+                      _Figure('Total', store.totalBalance, onGreen),
                       _Figure('Dépenses du mois', month.expense, onGreen),
                     ],
                   ),
@@ -138,51 +129,7 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              for (final (i, w) in store.wallets.indexed) ...[
-                if (i > 0) const SizedBox(width: 8),
-                Expanded(
-                  child: MifCard(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          walletIcon(w.type),
-                          size: 18,
-                          color: mif.textSecondary,
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          w.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: mif.textSecondary,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            formatAmount(store.walletBalance(w.id)),
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: mif.text,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
+          const _WalletTiles(),
           const SizedBox(height: 12),
           IncomeCard(onOpenReport: onOpenReport),
           const SizedBox(height: 12),
@@ -272,22 +219,49 @@ class _SavingsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
     final mif = context.mif;
+    final accounts = store.savingsWallets;
     final goals = store.goals;
     return MifCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SectionTitle(
-            'Épargnes',
+            'Épargne',
             trailing: TextButton(
               onPressed: onOpenSavings,
-              child: Text(goals.isEmpty ? 'Créer' : 'Voir tout'),
+              child: Text(accounts.isEmpty ? 'Ajouter' : 'Voir tout'),
             ),
           ),
-          if (goals.isEmpty)
+          if (accounts.isEmpty)
             Text(
-              "Aucune épargne pour l'instant. Créez l'épargne de sûreté et l'épargne de construction.",
+              "Aucun compte épargne pour l'instant. Ajoutez le compte où va "
+              "votre épargne, puis vos objectifs (sûreté, construction…).",
               style: TextStyle(fontSize: 14, color: mif.textSecondary),
+            ),
+          // Comptes épargne sans objectif : leur solde seulement.
+          for (final w in accounts.where(
+            (w) => store.walletGoals(w.id).isEmpty,
+          ))
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      w.name,
+                      style: TextStyle(fontSize: 14, color: mif.text),
+                    ),
+                  ),
+                  Text(
+                    formatAmount(store.walletBalance(w.id)),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: mif.text,
+                    ),
+                  ),
+                ],
+              ),
             ),
           for (final g in goals) ...[
             const SizedBox(height: 10),
@@ -327,6 +301,102 @@ class _SavingsCard extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Comptes courants : trois tuiles côte à côte, ou une rangée qui défile
+/// s'il y en a plus.
+class _WalletTiles extends StatelessWidget {
+  const _WalletTiles();
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final wallets = store.currentWallets;
+    Widget tile(Wallet w) => _WalletTile(wallet: w);
+    if (wallets.length <= 3) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final (i, w) in wallets.indexed) ...[
+            if (i > 0) const SizedBox(width: 8),
+            Expanded(child: tile(w)),
+          ],
+        ],
+      );
+    }
+    return SizedBox(
+      height: 96,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: wallets.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (_, i) => SizedBox(width: 128, child: tile(wallets[i])),
+      ),
+    );
+  }
+}
+
+class _WalletTile extends StatelessWidget {
+  const _WalletTile({required this.wallet});
+
+  final Wallet wallet;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final mif = context.mif;
+    final w = wallet;
+    return Material(
+      color: mif.card,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => WalletFormScreen.open(context, existing: w),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(walletIcon(w.type), size: 18, color: mif.textSecondary),
+                  if (w.isPrivate) ...[
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.lock_outline,
+                      size: 14,
+                      semanticLabel: 'Privé',
+                      color: mif.textSecondary,
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                w.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: mif.textSecondary),
+              ),
+              const SizedBox(height: 2),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  formatAmount(store.walletBalance(w.id)),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: mif.text,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

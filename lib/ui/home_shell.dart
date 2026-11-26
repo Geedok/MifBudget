@@ -17,6 +17,7 @@ Future<void> openEntry(
   Operation? existing,
   OperationType initialType = OperationType.expense,
   String? initialGoalId,
+  String? initialWalletId,
 }) async {
   final store = StoreScope.read(context);
   final messenger = ScaffoldMessenger.of(context);
@@ -27,6 +28,7 @@ Future<void> openEntry(
     existing: existing,
     initialType: initialType,
     initialGoalId: initialGoalId,
+    initialWalletId: initialWalletId,
   );
   if (result == null) return;
   final op = result.operation;
@@ -43,8 +45,11 @@ Future<void> openEntry(
       OperationType.expense =>
         'Dépense de ${formatFcfa(op.amount)} enregistrée',
       OperationType.income => 'Revenu de ${formatFcfa(op.amount)} enregistré',
-      OperationType.transfer =>
-        'Transfert de ${formatFcfa(op.amount)} enregistré',
+      OperationType.transfer => switch (store.savingsDirection(op)) {
+        > 0 => '${formatFcfa(op.amount)} mis de côté',
+        < 0 => "${formatFcfa(op.amount)} retiré de l'épargne",
+        _ => 'Transfert de ${formatFcfa(op.amount)} enregistré',
+      },
       OperationType.savingsDeposit => '${formatFcfa(op.amount)} mis de côté',
       OperationType.savingsWithdrawal =>
         "${formatFcfa(op.amount)} retiré de l'épargne",

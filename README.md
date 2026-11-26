@@ -17,13 +17,12 @@ Application Android de budget familial (Flutter). Voir `CLAUDE.md` pour le cahie
 - Accueil : carte « Revenus du mois » avec le total, l'écart avec le mois précédent, la répartition par source et la part déjà dépensée (ou le dépassement).
 - Onglet Rapports, « Bilan du mois » : revenus, dépenses et reste ; revenus par source comparés au mois précédent ; revenus et dépenses sur 6 mois (toucher un mois pour l'afficher) ; dépenses par catégorie ; détail des revenus.
 
-**Étape 3 : suivi de l'épargne** (faite, version 0.3.0)
-- Onglet Épargnes : total mis de côté, puis une carte par épargne (montant / cible, progression, reste à mettre de côté, date cible et versement mensuel nécessaire, mois de dépenses couverts pour l'épargne de sûreté), avec Verser et Retirer.
-- Création et modification d'une épargne : nom, icône, cible, montant déjà mis de côté, date cible facultative, portefeuille ; archivage (l'argent redevient disponible).
-- Détail d'une épargne avec l'historique des versements et retraits.
-- Saisie rapide : onglet « Épargne » (verser / retirer, retrait plafonné au montant épargné).
-- Une épargne reste dans son portefeuille : l'Accueil affiche le **disponible** = portefeuilles − mis de côté, et une carte Épargnes.
-- Bilan du mois : montant mis de côté dans le mois.
+**Étape 3 : suivi de l'épargne** (version 0.4.0, revue après la 0.3.0)
+- Portefeuilles multiples (Réglages ou tuiles de l'Accueil) : nom, type (espèces, banque, Mobile Money), rôle (courant ou épargne), commun au foyer ou personnel, privé ou visible, solde de départ, archivage.
+- Épargner = virer d'un compte courant vers un compte épargne (onglet « Épargne » de la saisie rapide, ou Verser / Retirer). Disponible = comptes courants ; total épargné = comptes épargne.
+- Objectifs (sûreté, construction…) rattachés à un compte épargne : un seul objectif a tout le solde du compte ; plusieurs se partagent le compte (part de départ + virements marqués), le reste est « non réparti ».
+- Onglet Épargnes : total épargné, épargne du mois, puis chaque compte avec ses objectifs (progression, reste, versement mensuel pour la date cible, mois de dépenses couverts pour la sûreté).
+- Les épargnes saisies en 0.3.0 sont reprises automatiquement dans un « Compte épargne ».
 
 Étape suivante : 4. statistiques et projections.
 

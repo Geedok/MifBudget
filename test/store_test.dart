@@ -6,6 +6,9 @@ import 'package:mifbudget/data/defaults.dart';
 import 'package:mifbudget/data/repository.dart';
 import 'package:mifbudget/models/category.dart';
 import 'package:mifbudget/models/operation.dart';
+import 'package:mifbudget/models/wallet.dart';
+import 'package:mifbudget/models/savings_goal.dart';
+import 'package:mifbudget/models/settings.dart';
 import 'package:mifbudget/state/budget_store.dart';
 
 const cash = DefaultIds.walletCash;
@@ -278,57 +281,6 @@ void main() {
   });
 
   group('épargnes', () {
-    test(
-      "versements et retraits : l'argent reste dans le portefeuille",
-      () async {
-        final store = await newStore();
-        final surete = await store.addGoal(
-          name: 'Épargne de sûreté',
-          target: 1500000,
-          walletId: bank,
-          startAmount: 300000,
-          icon: 'surete',
-        );
-        Future<Operation> save(OperationType t, int a, {DateTime? date}) =>
-            store.addOperation(
-              type: t,
-              amount: a,
-              date: date ?? clock,
-              savingsGoalId: surete.id,
-              sourceWalletId: t == OperationType.savingsDeposit ? bank : null,
-              targetWalletId: t == OperationType.savingsWithdrawal
-                  ? bank
-                  : null,
-            );
-        await save(OperationType.savingsDeposit, 100000);
-        await save(
-          OperationType.savingsDeposit,
-          50000,
-          date: DateTime(2026, 10, 5),
-        );
-        final retrait = await save(OperationType.savingsWithdrawal, 30000);
-
-        expect(store.goalBalance(surete.id), 420000);
-        expect(store.walletBalance(bank), 400000);
-        expect(store.totalBalance, 470000);
-        expect(store.totalSaved, 420000);
-        expect(store.available, 50000);
-        final m = store.monthSummary(clock);
-        expect(m.saved, 70000);
-        expect(m.expense, 0);
-        expect(m.income, 0);
-
-        await store.deleteOperation(retrait.id);
-        expect(store.goalBalance(surete.id), 450000);
-
-        // Une épargne archivée redevient disponible.
-        await store.updateGoal(store.goal(surete.id)!.copyWith(archived: true));
-        expect(store.goals, isEmpty);
-        expect(store.totalSaved, 0);
-        expect(store.available, 470000);
-      },
-    );
-
     test('versement mensuel nécessaire pour tenir la date cible', () async {
       final store = await newStore();
       final g = await store.addGoal(
@@ -367,36 +319,272 @@ void main() {
       expect(store.averageMonthlyExpense(), 400000);
     });
 
-    test('les épargnes sont enregistrées dans le fichier', () async {
+    test(
+      "épargner = virer d'un compte courant vers un compte épargne",
+      () async {
+        final store = await newStore();
+        final compte = await store.addWallet(
+          name: 'Compte épargne',
+          type: WalletType.bank,
+          role: WalletRole.savings,
+          openingBalance: 500000,
+        );
+        expect(store.savingsWallets.single.id, compte.id);
+        expect(store.currentWallets.map((w) => w.id), [cash, bank, momo]);
+        expect(store.totalSaved, 500000);
+        expect(store.available, 470000);
+
+        // Seul objectif du compte : il en a tout le solde.
+        final surete = await store.addGoal(
+          name: 'Sûreté',
+          target: 1500000,
+          walletId: compte.id,
+          icon: 'surete',
+        );
+        expect(store.goalBalance(surete.id), 500000);
+        expect(store.unallocated(compte.id), 0);
+
+        Future<Operation> move(int a, String from, String to) =>
+            store.addOperation(
+              type: OperationType.transfer,
+              amount: a,
+              date: clock,
+              sourceWalletId: from,
+              targetWalletId: to,
+            );
+        final versement = await move(100000, bank, compte.id);
+        await move(30000, compte.id, cash);
+        expect(store.savingsDirection(versement), 1);
+        expect(store.walletBalance(bank), 300000);
+        expect(store.walletBalance(compte.id), 570000);
+        expect(store.goalBalance(surete.id), 570000);
+        expect(store.totalSaved, 570000);
+        expect(store.available, 400000);
+        final m = store.monthSummary(clock);
+        expect(m.saved, 70000);
+        expect(m.expense, 0);
+        expect(m.income, 0);
+
+        // Un virement entre comptes courants ne compte pas comme épargne.
+        await move(5000, cash, momo);
+        expect(store.monthSummary(clock).saved, 70000);
+      },
+    );
+
+    test(
+      'plusieurs objectifs sur un même compte, et la part non répartie',
+      () async {
+        final store = await newStore();
+        final compte = await store.addWallet(
+          name: 'Compte épargne',
+          type: WalletType.bank,
+          role: WalletRole.savings,
+          openingBalance: 1000000,
+        );
+        final surete = await store.addGoal(
+          name: 'Sûreté',
+          target: 1500000,
+          walletId: compte.id,
+        );
+        // Le deuxième objectif prend 300 000 sur le premier.
+        final construction = await store.addGoal(
+          name: 'Construction',
+          target: 8000000,
+          walletId: compte.id,
+          startAmount: 300000,
+        );
+        expect(store.goalBalance(surete.id), 700000);
+        expect(store.goalBalance(construction.id), 300000);
+        expect(store.unallocated(compte.id), 0);
+
+        Future<void> move(int a, String from, String to, [String? goal]) =>
+            store.addOperation(
+              type: OperationType.transfer,
+              amount: a,
+              date: clock,
+              sourceWalletId: from,
+              targetWalletId: to,
+              savingsGoalId: goal,
+            );
+        await move(200000, bank, compte.id, construction.id);
+        await move(50000, bank, compte.id); // non réparti
+        await move(20000, compte.id, cash, surete.id);
+        expect(store.goalBalance(construction.id), 500000);
+        expect(store.goalBalance(surete.id), 680000);
+        expect(store.unallocated(compte.id), 50000);
+        expect(store.walletBalance(compte.id), 1230000);
+        expect(store.goalOperations(construction.id), hasLength(1));
+
+        // Archiver l'un : l'autre redevient seul et reprend tout le compte.
+        await store.updateGoal(
+          store.goal(construction.id)!.copyWith(archived: true),
+        );
+        expect(store.goalBalance(surete.id), 1230000);
+      },
+    );
+
+    test('deux comptes épargne, un objectif chacun', () async {
+      final store = await newStore();
+      Future<Wallet> account(String name, int opening) => store.addWallet(
+        name: name,
+        type: WalletType.bank,
+        role: WalletRole.savings,
+        openingBalance: opening,
+      );
+      final a = await account('Épargne sûreté', 900000);
+      final b = await account('Épargne construction', 2400000);
+      final ga = await store.addGoal(
+        name: 'Sûreté',
+        target: 1500000,
+        walletId: a.id,
+      );
+      final gb = await store.addGoal(
+        name: 'Construction',
+        target: 8000000,
+        walletId: b.id,
+      );
+      expect(store.goalBalance(ga.id), 900000);
+      expect(store.goalBalance(gb.id), 2400000);
+      expect(store.totalSaved, 3300000);
+      // Un virement d'un compte épargne à l'autre ne change pas l'épargne.
+      await store.addOperation(
+        type: OperationType.transfer,
+        amount: 100000,
+        date: clock,
+        sourceWalletId: a.id,
+        targetWalletId: b.id,
+      );
+      expect(store.monthSummary(clock).saved, 0);
+      expect(store.goalBalance(gb.id), 2500000);
+    });
+
+    test('portefeuille personnel privé', () async {
+      final store = await newStore();
+      final wave = await store.addWallet(
+        name: 'Wave',
+        type: WalletType.mobileMoney,
+        shared: false,
+        private: true,
+      );
+      expect(wave.isPrivate, isTrue);
+      expect(wave.ownerId, store.settings.memberId);
+      // Un portefeuille commun n'est jamais privé.
+      final commun = await store.addWallet(
+        name: 'Caisse',
+        type: WalletType.cash,
+        private: true,
+      );
+      expect(commun.isPrivate, isFalse);
+      expect(commun.ownerId, isNull);
+    });
+
+    test('reprise des épargnes de la version 0.3.0', () async {
+      final t = DateTime(2026, 11, 20);
+      final repo = MemoryRepository(
+        BudgetData(
+          version: 1,
+          settings: const AppSettings(
+            setupDone: true,
+            memberId: 'moi',
+            memberName: 'Eudokia',
+          ),
+          wallets: defaultWallets(t, cash: 20000, bank: 1000000),
+          categories: defaultCategories(t),
+          goals: [
+            SavingsGoal(
+              id: 'g1',
+              name: 'Épargne de sûreté',
+              target: 1500000,
+              walletId: bank,
+              startAmount: 300000,
+              createdAt: t,
+              updatedAt: t,
+            ),
+          ],
+          operations: [
+            Operation(
+              id: 'v1',
+              type: OperationType.savingsDeposit,
+              amount: 100000,
+              date: t,
+              savingsGoalId: 'g1',
+              sourceWalletId: bank,
+              authorId: 'moi',
+              createdAt: t,
+              updatedAt: t,
+            ),
+            Operation(
+              id: 'r1',
+              type: OperationType.savingsWithdrawal,
+              amount: 30000,
+              date: t,
+              savingsGoalId: 'g1',
+              targetWalletId: bank,
+              authorId: 'moi',
+              createdAt: t,
+              updatedAt: t,
+            ),
+          ],
+        ),
+      );
+      final store = await BudgetStore.open(repo, clock: now);
+      final compte = store.savingsWallets.single;
+      expect(compte.name, 'Compte épargne');
+      expect(store.goal('g1')!.walletId, compte.id);
+      expect(store.walletBalance(compte.id), 370000);
+      expect(store.goalBalance('g1'), 370000);
+      expect(store.walletBalance(bank), 630000);
+      // Le disponible ne change pas : 1 020 000 − 370 000.
+      expect(store.available, 650000);
+      expect(store.operation('v1')!.type, OperationType.transfer);
+      expect(store.operation('v1')!.targetWalletId, compte.id);
+      expect(store.operation('r1')!.sourceWalletId, compte.id);
+      expect(store.operation('r1')!.targetWalletId, bank);
+
+      // Pas de deuxième reprise à la réouverture.
+      final again = await BudgetStore.open(repo, clock: now);
+      expect(again.savingsWallets, hasLength(1));
+      expect(again.walletBalance(compte.id), 370000);
+    });
+
+    test('comptes et objectifs sont enregistrés dans le fichier', () async {
       final dir = await Directory.systemTemp.createTemp('mifbudget');
       addTearDown(() => dir.delete(recursive: true));
       final file = File('${dir.path}/mifbudget.json');
       final store = await newStore(LocalJsonRepository(file));
+      final compte = await store.addWallet(
+        name: 'Compte épargne',
+        type: WalletType.bank,
+        role: WalletRole.savings,
+        openingBalance: 2400000,
+        shared: false,
+        private: true,
+      );
       final g = await store.addGoal(
         name: 'Épargne de construction',
         target: 8000000,
         targetDate: DateTime(2028, 12),
-        walletId: bank,
-        startAmount: 2400000,
+        walletId: compte.id,
         icon: 'construction',
       );
       await store.addOperation(
-        type: OperationType.savingsDeposit,
+        type: OperationType.transfer,
         amount: 225000,
         date: clock,
-        savingsGoalId: g.id,
         sourceWalletId: bank,
+        targetWalletId: compte.id,
       );
 
       final reopened = await BudgetStore.open(
         LocalJsonRepository(file),
         clock: now,
       );
+      final w = reopened.savingsWallets.single;
+      expect(w.isSavings, isTrue);
+      expect(w.isPrivate, isTrue);
       final loaded = reopened.goals.single;
-      expect(loaded.name, 'Épargne de construction');
       expect(loaded.targetDate, DateTime(2028, 12));
-      expect(loaded.walletId, bank);
-      expect(loaded.icon, 'construction');
+      expect(loaded.walletId, compte.id);
       expect(reopened.goalBalance(g.id), 2625000);
     });
   });

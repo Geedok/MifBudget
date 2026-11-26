@@ -2,30 +2,38 @@ import 'package:material_ui/material_ui.dart';
 
 import '../core/format.dart';
 import '../models/savings_goal.dart';
+import '../models/wallet.dart';
 import '../state/budget_store.dart';
 import '../theme.dart';
+import 'wallet_form_screen.dart';
 import 'widgets/amount_field.dart';
 import 'widgets/common.dart';
 
-/// Création ou modification d'une épargne : nom, cible, date cible
-/// facultative, portefeuille, montant déjà épargné, icône.
+/// Création ou modification d'un objectif d'épargne : nom, icône, cible,
+/// date cible facultative, compte épargne, et sa part du compte quand
+/// celui-ci a plusieurs objectifs.
 class GoalFormScreen extends StatefulWidget {
   const GoalFormScreen({
     super.key,
     this.existing,
     this.suggestedName,
     this.suggestedIcon,
+    this.walletId,
   });
 
   final SavingsGoal? existing;
   final String? suggestedName;
   final String? suggestedIcon;
 
+  /// Compte épargne proposé.
+  final String? walletId;
+
   static Future<SavingsGoal?> open(
     BuildContext context, {
     SavingsGoal? existing,
     String? suggestedName,
     String? suggestedIcon,
+    String? walletId,
   }) => Navigator.of(context).push<SavingsGoal>(
     MaterialPageRoute(
       fullscreenDialog: true,
@@ -33,6 +41,7 @@ class GoalFormScreen extends StatefulWidget {
         existing: existing,
         suggestedName: suggestedName,
         suggestedIcon: suggestedIcon,
+        walletId: walletId,
       ),
     ),
   );
@@ -66,15 +75,19 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
     _start = TextEditingController(text: amount(e?.startAmount ?? 0));
     _targetDate = e?.targetDate;
     _icon = e?.icon ?? widget.suggestedIcon ?? 'epargne';
-    final wallets = store.wallets;
     _walletId =
         e?.walletId ??
-        wallets
-            .where((w) => w.name == 'Banque')
-            .followedBy(wallets)
-            .map((w) => w.id)
-            .firstOrNull;
+        widget.walletId ??
+        store.savingsWallets.map((w) => w.id).firstOrNull;
   }
+
+  /// Les autres objectifs du compte choisi.
+  List<SavingsGoal> _others(BudgetStore store) => _walletId == null
+      ? const []
+      : store
+            .walletGoals(_walletId!)
+            .where((g) => g.id != widget.existing?.id)
+            .toList();
 
   @override
   void dispose() {
@@ -85,6 +98,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
   }
 
   String? get _missing {
+    if (_walletId == null) return 'Choisir un compte épargne';
     if (_name.text.trim().isEmpty) return 'Donner un nom';
     if ((parseAmount(_target.text) ?? 0) <= 0) return 'Saisir le montant cible';
     return null;
@@ -110,7 +124,8 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
     setState(() => _saving = true);
     final store = StoreScope.read(context);
     final target = parseAmount(_target.text)!;
-    final start = parseAmount(_start.text) ?? 0;
+    // La part de départ ne sert que si le compte a d'autres objectifs.
+    final start = _others(store).isEmpty ? 0 : parseAmount(_start.text) ?? 0;
     final SavingsGoal result;
     if (_editing) {
       result = widget.existing!.copyWith(
@@ -145,8 +160,8 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
         title: Text('Archiver « ${g.name} » ?'),
         content: Text(
           balance > 0
-              ? "Les ${formatFcfa(balance)} mis de côté redeviendront disponibles. L'historique est conservé."
-              : "L'épargne disparaîtra de la liste. L'historique est conservé.",
+              ? "L'objectif disparaîtra de la liste ; ses ${formatFcfa(balance)} restent sur le compte épargne. L'historique est conservé."
+              : "L'objectif disparaîtra de la liste. L'historique est conservé.",
         ),
         actions: [
           TextButton(
@@ -176,7 +191,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
           tooltip: 'Fermer',
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text(_editing ? "Modifier l'épargne" : 'Nouvelle épargne'),
+        title: Text(_editing ? "Modifier l'objectif" : 'Nouvel objectif'),
         actions: [
           if (_editing)
             IconButton(
@@ -204,16 +219,10 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
             const SizedBox(height: 16),
             AmountField(controller: _target, label: 'Montant cible'),
             const SizedBox(height: 16),
-            AmountField(
+            _StartAmount(
               controller: _start,
-              label: 'Déjà mis de côté (facultatif)',
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
-              child: Text(
-                "L'argent que vous avez déjà pour cette épargne. Il doit être compté dans le solde du portefeuille choisi plus bas.",
-                style: TextStyle(fontSize: 12, color: mif.textSecondary),
-              ),
+              others: _others(store),
+              walletId: _walletId,
             ),
             const SizedBox(height: 16),
             Text(
@@ -241,28 +250,43 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              "Portefeuille où se trouve l'argent",
+              'Compte épargne',
               style: TextStyle(fontSize: 13, color: mif.textSecondary),
             ),
             const SizedBox(height: 6),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                for (final w in store.wallets)
-                  ChoiceChip(
-                    avatar: Icon(walletIcon(w.type), size: 18),
-                    label: Text(w.name),
-                    selected: w.id == _walletId,
-                    showCheckmark: false,
-                    onSelected: (_) => setState(() => _walletId = w.id),
-                  ),
-              ],
-            ),
+            if (store.savingsWallets.isEmpty)
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final w = await WalletFormScreen.open(
+                    context,
+                    initialRole: WalletRole.savings,
+                  );
+                  if (w != null && w.isSavings) {
+                    setState(() => _walletId = w.id);
+                  }
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Ajouter un compte épargne'),
+              )
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  for (final w in store.savingsWallets)
+                    ChoiceChip(
+                      avatar: Icon(walletIcon(w.type), size: 18),
+                      label: Text(w.name),
+                      selected: w.id == _walletId,
+                      showCheckmark: false,
+                      onSelected: (_) => setState(() => _walletId = w.id),
+                    ),
+                ],
+              ),
             const SizedBox(height: 28),
             // Le bouton suit la saisie du nom et du montant cible.
             ListenableBuilder(
-              listenable: Listenable.merge([_name, _target]),
+              listenable: Listenable.merge([_name, _target, _start]),
               builder: (context, _) {
                 final missing = _missing;
                 return FilledButton(
@@ -331,6 +355,53 @@ class _IconChoice extends StatelessWidget {
               ),
             ),
           ),
+      ],
+    );
+  }
+}
+
+/// Part du compte déjà destinée à l'objectif : utile seulement si le compte
+/// a d'autres objectifs ; sinon l'objectif a tout le solde du compte.
+class _StartAmount extends StatelessWidget {
+  const _StartAmount({
+    required this.controller,
+    required this.others,
+    required this.walletId,
+  });
+
+  final TextEditingController controller;
+  final List<SavingsGoal> others;
+  final String? walletId;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final mif = context.mif;
+    final help = TextStyle(fontSize: 12, color: mif.textSecondary);
+    if (walletId == null) return const SizedBox.shrink();
+    if (others.isEmpty) {
+      return Text(
+        "Seul objectif de ce compte : tout son solde "
+        "(${formatFcfa(store.walletBalance(walletId!))}) compte pour lui.",
+        style: help,
+      );
+    }
+    final source = others.length == 1
+        ? "Elle est prise sur « ${others.first.name} », qui a "
+              "${formatFcfa(store.goalBalance(others.first.id))}."
+        : 'Non réparti sur ce compte : '
+              '${formatFcfa(store.unallocated(walletId!))}.';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AmountField(
+          controller: controller,
+          label: 'Part du compte déjà destinée à cet objectif',
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+          child: Text(source, style: help),
+        ),
       ],
     );
   }

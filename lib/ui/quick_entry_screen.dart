@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../core/format.dart';
 import '../models/category.dart';
 import '../models/operation.dart';
+import '../models/savings_goal.dart';
 import '../models/wallet.dart';
 import '../state/budget_store.dart';
 import '../theme.dart';
@@ -30,6 +31,7 @@ class QuickEntryScreen extends StatefulWidget {
     this.existing,
     this.initialType = OperationType.expense,
     this.initialGoalId,
+    this.initialWalletId,
   });
 
   /// Opération à modifier ; null pour une nouvelle saisie.
@@ -38,14 +40,18 @@ class QuickEntryScreen extends StatefulWidget {
   /// Type proposé pour une nouvelle saisie.
   final OperationType initialType;
 
-  /// Épargne présélectionnée (versement ou retrait).
+  /// Objectif présélectionné (versement ou retrait).
   final String? initialGoalId;
+
+  /// Compte épargne présélectionné (versement ou retrait).
+  final String? initialWalletId;
 
   static Future<EntryResult?> open(
     BuildContext context, {
     Operation? existing,
     OperationType initialType = OperationType.expense,
     String? initialGoalId,
+    String? initialWalletId,
   }) => Navigator.of(context).push<EntryResult>(
     MaterialPageRoute(
       fullscreenDialog: true,
@@ -53,6 +59,7 @@ class QuickEntryScreen extends StatefulWidget {
         existing: existing,
         initialType: initialType,
         initialGoalId: initialGoalId,
+        initialWalletId: initialWalletId,
       ),
     ),
   );
@@ -95,8 +102,10 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       if (e.type == OperationType.transfer) {
         _fromId = e.sourceWalletId;
         _toId = e.targetWalletId;
-      } else if (e.type.isSavings) {
-        _walletId = e.sourceWalletId ?? e.targetWalletId;
+        // Un virement vers (ou depuis) un compte épargne s'affiche en Épargne.
+        final direction = store.savingsDirection(e);
+        if (direction > 0) _type = OperationType.savingsDeposit;
+        if (direction < 0) _type = OperationType.savingsWithdrawal;
       } else {
         _walletId = e.type == OperationType.income
             ? e.targetWalletId
@@ -106,7 +115,6 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       _type = widget.initialType;
       _date = dateOnly(store.now());
       _goalId = widget.initialGoalId;
-      if (_type.isSavings) _goalId ??= _singleGoal(store);
       _applyDefaultWallets(store);
     }
   }
@@ -122,9 +130,20 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     if (wallets.isEmpty) return;
     String fallback(String? id) => id ?? wallets.first.id;
     if (_type.isSavings) {
-      _walletId = fallback(
-        store.goal(_goalId)?.walletId ?? store.lastWalletFor(_type),
-      );
+      final current = store.currentWallets.map((w) => w.id).toList();
+      final savings = store.savingsWallets.map((w) => w.id).toList();
+      final last = store.lastWalletFor(OperationType.transfer);
+      final currentId = (current.contains(last) ? last : current.firstOrNull);
+      final savingsId =
+          store.goal(_goalId)?.walletId ??
+          (savings.contains(widget.initialWalletId)
+              ? widget.initialWalletId
+              : null) ??
+          (savings.contains(_savingsSide) ? _savingsSide : savings.firstOrNull);
+      final deposit = _type == OperationType.savingsDeposit;
+      _fromId = deposit ? currentId : savingsId;
+      _toId = deposit ? savingsId : currentId;
+      _syncGoal(store);
     } else if (_type == OperationType.transfer) {
       _fromId ??= fallback(store.lastWalletFor(OperationType.transfer));
       _toId ??= wallets
@@ -137,19 +156,32 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
 
   int get _amount => int.tryParse(_digits) ?? 0;
 
-  String? _singleGoal(BudgetStore store) {
-    final goals = store.goals;
-    return goals.length == 1 ? goals.first.id : null;
+  /// Compte épargne concerné (destination d'un versement, origine d'un
+  /// retrait).
+  String? get _savingsSide =>
+      _type == OperationType.savingsWithdrawal ? _fromId : _toId;
+
+  /// L'objectif choisi doit appartenir au compte épargne ; un objectif seul
+  /// sur son compte est choisi d'office.
+  void _syncGoal(BudgetStore store) {
+    final side = _savingsSide;
+    final goals = side == null ? const [] : store.walletGoals(side);
+    if (!goals.any((g) => g.id == _goalId)) _goalId = null;
+    if (goals.length == 1) _goalId = goals.first.id;
   }
 
-  /// Ce qu'on peut retirer de l'épargne choisie (en modification, le retrait
-  /// en cours compte comme déjà rendu).
+  /// Ce qu'on peut retirer : la part de l'objectif choisi si le compte en a
+  /// plusieurs, sinon le solde du compte. En modification, le montant actuel
+  /// de l'opération compte comme déjà rendu.
   int _withdrawable(BudgetStore store) {
-    var balance = store.goalBalance(_goalId!);
+    final walletId = _fromId!;
+    final multi = store.walletGoals(walletId).length > 1;
+    var balance = multi && _goalId != null
+        ? store.goalBalance(_goalId!)
+        : store.walletBalance(walletId);
     final e = widget.existing;
-    if (e != null && e.savingsGoalId == _goalId && !e.deleted) {
-      if (e.type == OperationType.savingsWithdrawal) balance += e.amount;
-      if (e.type == OperationType.savingsDeposit) balance -= e.amount;
+    if (e != null && !e.deleted && e.sourceWalletId == walletId) {
+      if (!multi || e.savingsGoalId == _goalId) balance += e.amount;
     }
     return balance;
   }
@@ -166,12 +198,13 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       return null;
     }
     if (_type.isSavings) {
-      if (_goalId == null) return 'Choisir une épargne';
+      final store = StoreScope.read(context);
+      if (store.savingsWallets.isEmpty) return 'Ajouter un compte épargne';
+      if (_fromId == null || _toId == null) return 'Choisir les portefeuilles';
       if (_type == OperationType.savingsWithdrawal) {
-        final max = _withdrawable(StoreScope.read(context));
+        final max = _withdrawable(store);
         if (_amount > max) return 'Maximum ${formatFcfa(max < 0 ? 0 : max)}';
       }
-      if (_walletId == null) return 'Choisir un portefeuille';
       return null;
     }
     if (_categoryId == null) return 'Choisir une catégorie';
@@ -188,9 +221,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       if (kindChanged || type == OperationType.transfer || type.isSavings) {
         _categoryId = null;
       }
-      final store = StoreScope.read(context);
-      if (type.isSavings) _goalId ??= _singleGoal(store);
-      _applyDefaultWallets(store);
+      _applyDefaultWallets(StoreScope.read(context));
     });
   }
 
@@ -207,18 +238,18 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     if (_missing != null || _saving) return;
     setState(() => _saving = true);
     final store = StoreScope.read(context);
-    final isTransfer = _type == OperationType.transfer;
-    final incoming =
-        _type == OperationType.income ||
-        _type == OperationType.savingsWithdrawal;
+    // L'épargne est un virement entre un compte courant et un compte épargne.
+    final type = _type.isSavings ? OperationType.transfer : _type;
+    final isTransfer = type == OperationType.transfer;
+    final incoming = type == OperationType.income;
     final source = isTransfer ? _fromId : (incoming ? null : _walletId);
     final target = isTransfer ? _toId : (incoming ? _walletId : null);
-    final category = isTransfer || _type.isSavings ? null : _categoryId;
+    final category = isTransfer ? null : _categoryId;
     final goalId = _type.isSavings ? _goalId : null;
     final EntryResult result;
     if (_editing) {
       final updated = widget.existing!.copyWith(
-        type: _type,
+        type: type,
         amount: _amount,
         date: _date,
         categoryId: () => category,
@@ -231,7 +262,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       result = EntryResult(updated);
     } else {
       final op = await store.addOperation(
-        type: _type,
+        type: type,
         amount: _amount,
         date: _date,
         categoryId: category,
@@ -316,19 +347,22 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
                   if (_type.isSavings) ...[
                     _SavingsFields(
                       type: _type,
+                      fromId: _fromId,
+                      toId: _toId,
                       goalId: _goalId,
-                      onType: (t) => setState(() => _type = t),
-                      onGoal: (id) => setState(() {
-                        _goalId = id;
+                      onType: (t) => setState(() {
+                        _type = t;
                         _applyDefaultWallets(store);
                       }),
-                    ),
-                    const SizedBox(height: 12),
-                    _Label("Portefeuille où se trouve l'argent"),
-                    _WalletChips(
-                      wallets: store.wallets,
-                      selectedId: _walletId,
-                      onSelected: (id) => setState(() => _walletId = id),
+                      onFrom: (id) => setState(() {
+                        _fromId = id;
+                        _syncGoal(store);
+                      }),
+                      onTo: (id) => setState(() {
+                        _toId = id;
+                        _syncGoal(store);
+                      }),
+                      onGoal: (id) => setState(() => _goalId = id),
                     ),
                   ] else if (_type != OperationType.transfer) ...[
                     _Label('Catégorie'),
@@ -499,26 +533,46 @@ class _TypeSelector extends StatelessWidget {
   }
 }
 
-/// Épargne : verser ou retirer, et sur quel objectif.
+/// Épargne : verser (compte courant → compte épargne) ou retirer (compte
+/// épargne → compte courant), et pour quel objectif si le compte en a
+/// plusieurs.
 class _SavingsFields extends StatelessWidget {
   const _SavingsFields({
     required this.type,
+    required this.fromId,
+    required this.toId,
     required this.goalId,
     required this.onType,
+    required this.onFrom,
+    required this.onTo,
     required this.onGoal,
   });
 
   final OperationType type;
+  final String? fromId;
+  final String? toId;
   final String? goalId;
   final ValueChanged<OperationType> onType;
-  final ValueChanged<String> onGoal;
+  final ValueChanged<String> onFrom;
+  final ValueChanged<String> onTo;
+  final ValueChanged<String?> onGoal;
 
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
     final mif = context.mif;
-    final goals = store.goals;
-    final selected = store.goal(goalId);
+    final deposit = type == OperationType.savingsDeposit;
+    final savingsId = deposit ? toId : fromId;
+    final goals = savingsId == null
+        ? const <SavingsGoal>[]
+        : store.walletGoals(savingsId);
+    if (store.savingsWallets.isEmpty) {
+      return Text(
+        "Aucun compte épargne pour l'instant : ajoutez-en un dans l'onglet "
+        'Épargnes (ou dans les Réglages, en choisissant le rôle « Épargne »).',
+        style: TextStyle(fontSize: 14, color: mif.textSecondary),
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -529,7 +583,7 @@ class _SavingsFields extends StatelessWidget {
                 label: 'Verser',
                 icon: Icons.arrow_downward,
                 expand: true,
-                selected: type == OperationType.savingsDeposit,
+                selected: deposit,
                 onTap: () => onType(OperationType.savingsDeposit),
               ),
             ),
@@ -539,20 +593,36 @@ class _SavingsFields extends StatelessWidget {
                 label: 'Retirer',
                 icon: Icons.arrow_upward,
                 expand: true,
-                selected: type == OperationType.savingsWithdrawal,
+                selected: !deposit,
                 onTap: () => onType(OperationType.savingsWithdrawal),
               ),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        _Label('Épargne'),
-        if (goals.isEmpty)
+        _Label('De'),
+        _WalletChips(
+          wallets: deposit ? store.currentWallets : store.savingsWallets,
+          selectedId: fromId,
+          onSelected: onFrom,
+        ),
+        const SizedBox(height: 12),
+        _Label('Vers'),
+        _WalletChips(
+          wallets: deposit ? store.savingsWallets : store.currentWallets,
+          selectedId: toId,
+          onSelected: onTo,
+        ),
+        if (goals.length == 1) ...[
+          const SizedBox(height: 8),
           Text(
-            "Aucune épargne pour l'instant : créez-en une dans l'onglet Épargnes.",
-            style: TextStyle(fontSize: 14, color: mif.textSecondary),
-          )
-        else
+            'Pour : ${goals.first.name}',
+            style: TextStyle(fontSize: 13, color: mif.textSecondary),
+          ),
+        ],
+        if (goals.length > 1) ...[
+          const SizedBox(height: 12),
+          _Label('Pour quel objectif ?'),
           Wrap(
             spacing: 8,
             runSpacing: 4,
@@ -564,14 +634,20 @@ class _SavingsFields extends StatelessWidget {
                   selected: g.id == goalId,
                   onTap: () => onGoal(g.id),
                 ),
+              _Chip(
+                label: 'Non réparti',
+                selected: goalId == null,
+                onTap: () => onGoal(null),
+              ),
             ],
           ),
-        if (selected != null) ...[
-          const SizedBox(height: 6),
-          Text(
-            'Déjà mis de côté : ${formatFcfa(store.goalBalance(selected.id))}',
-            style: TextStyle(fontSize: 12, color: mif.textSecondary),
-          ),
+          if (goalId != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Déjà mis de côté : ${formatFcfa(store.goalBalance(goalId!))}',
+              style: TextStyle(fontSize: 12, color: mif.textSecondary),
+            ),
+          ],
         ],
       ],
     );

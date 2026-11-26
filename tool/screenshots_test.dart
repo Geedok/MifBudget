@@ -13,6 +13,7 @@ import 'package:mifbudget/data/defaults.dart';
 import 'package:mifbudget/data/repository.dart';
 import 'package:mifbudget/models/operation.dart';
 import 'package:mifbudget/models/settings.dart';
+import 'package:mifbudget/models/wallet.dart';
 import 'package:mifbudget/state/budget_store.dart';
 
 final outDir = Platform.environment['SHOTS_DIR']!;
@@ -75,7 +76,7 @@ void main() {
       await store.completeSetup(
         memberName: 'Eudokia',
         cash: 22000,
-        bank: 3412000,
+        bank: 712000,
         mobileMoney: 58300,
       );
       await store.setTheme(dark ? ThemeChoice.dark : ThemeChoice.light);
@@ -191,28 +192,43 @@ void main() {
         );
       }
 
+      // Le salaire arrive sur la banque ; l'épargne part vers un compte
+      // épargne qui porte deux objectifs.
+      final compte = await store.addWallet(
+        name: 'Compte épargne',
+        type: WalletType.bank,
+        role: WalletRole.savings,
+        openingBalance: 3000000,
+      );
+      await store.addWallet(
+        name: 'Wave',
+        type: WalletType.mobileMoney,
+        shared: false,
+        private: true,
+        openingBalance: 12500,
+      );
       final surete = await store.addGoal(
         name: 'Épargne de sûreté',
         target: 1500000,
-        walletId: DefaultIds.walletBank,
-        startAmount: 800000,
+        walletId: compte.id,
         icon: 'surete',
       );
       final construction = await store.addGoal(
         name: 'Épargne de construction',
         target: 8000000,
         targetDate: DateTime(2028, 12),
-        walletId: DefaultIds.walletBank,
+        walletId: compte.id,
         startAmount: 2200000,
         icon: 'construction',
       );
       for (final (g, a) in [(surete, 100000), (construction, 200000)]) {
         await store.addOperation(
-          type: OperationType.savingsDeposit,
+          type: OperationType.transfer,
           amount: a,
           date: clock.subtract(const Duration(days: 3)),
           savingsGoalId: g.id,
           sourceWalletId: DefaultIds.walletBank,
+          targetWalletId: compte.id,
         );
       }
 

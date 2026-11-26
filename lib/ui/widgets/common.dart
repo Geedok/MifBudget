@@ -42,6 +42,13 @@ const goalIcons = <String, IconData>{
 
 IconData goalIcon(String? key) => goalIcons[key] ?? Icons.savings_outlined;
 
+/// « Banque · Épargne · Personnel, privé ».
+String walletDescription(Wallet w) => [
+  w.type.label,
+  if (w.isSavings) 'Épargne',
+  if (!w.shared) w.private ? 'Personnel, privé' : 'Personnel, visible',
+].join(' · ');
+
 IconData walletIcon(WalletType type) => switch (type) {
   WalletType.cash => Icons.payments_outlined,
   WalletType.bank => Icons.account_balance_outlined,
@@ -101,24 +108,29 @@ class MifCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
 
+  // Un Material (et non un simple fond coloré) pour que les lignes de liste
+  // et les boutons à l'intérieur gardent leur effet au toucher.
   @override
-  Widget build(BuildContext context) => Container(
-    decoration: BoxDecoration(
-      color: context.mif.card,
-      borderRadius: BorderRadius.circular(16),
-    ),
-    padding: padding ?? const EdgeInsets.all(16),
-    child: child,
+  Widget build(BuildContext context) => Material(
+    color: context.mif.card,
+    borderRadius: BorderRadius.circular(16),
+    clipBehavior: Clip.antiAlias,
+    child: Padding(padding: padding ?? const EdgeInsets.all(16), child: child),
   );
 }
 
-/// Libellé principal d'une opération : sous-catégorie, catégorie ou
-/// « Transfert ».
+/// Libellé principal d'une opération : sous-catégorie, catégorie, objectif
+/// d'épargne, « Épargne », « Retrait d'épargne » ou « Transfert ».
 String operationTitle(BudgetStore store, Operation op) {
-  if (op.type == OperationType.transfer) return 'Transfert';
-  if (op.type.isSavings) {
-    return store.goal(op.savingsGoalId)?.name ?? op.type.label;
+  final direction = store.savingsDirection(op);
+  if (direction != 0 || op.type.isSavings) {
+    final goal = store.goal(op.savingsGoalId);
+    if (goal != null) return goal.name;
+    return direction < 0 || op.type == OperationType.savingsWithdrawal
+        ? "Retrait d'épargne"
+        : 'Épargne';
   }
+  if (op.type == OperationType.transfer) return 'Transfert';
   return store.category(op.categoryId)?.name ?? op.type.label;
 }
 
@@ -155,6 +167,9 @@ class OperationTile extends StatelessWidget {
       final parent = store.category(cat.parentId);
       if (parent != null) parts.add(parent.name);
     }
+    final direction = store.savingsDirection(op);
+    final savings = direction != 0 || op.type.isSavings;
+    if (direction != 0) parts.add(direction > 0 ? 'Mis de côté' : 'Retiré');
     if (op.type.isSavings) {
       parts.add(
         op.type == OperationType.savingsDeposit ? 'Mis de côté' : 'Retiré',
@@ -175,7 +190,7 @@ class OperationTile extends StatelessWidget {
     if (op.note.isNotEmpty) parts.add(op.note);
 
     // Transferts et épargne ne sont ni des revenus ni des dépenses.
-    final neutral = isTransfer || op.type.isSavings;
+    final neutral = isTransfer || savings;
     final amountText = neutral
         ? formatAmount(op.amount)
         : formatSigned(signedAmount(op));
@@ -192,13 +207,13 @@ class OperationTile extends StatelessWidget {
         child: Row(
           children: [
             CategoryBadge(
-              category: isTransfer || op.type.isSavings
+              category: isTransfer || savings
                   ? null
                   : store.topCategory(op.categoryId),
-              icon: op.type.isSavings
+              icon: savings
                   ? goalIcon(store.goal(op.savingsGoalId)?.icon)
                   : null,
-              color: op.type.isSavings ? mif.green : null,
+              color: savings ? mif.green : null,
             ),
             const SizedBox(width: 12),
             Expanded(

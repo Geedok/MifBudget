@@ -2,10 +2,9 @@ import 'package:material_ui/material_ui.dart';
 
 import '../core/format.dart';
 import '../models/settings.dart';
-import '../models/wallet.dart';
 import '../state/budget_store.dart';
 import '../theme.dart';
-import 'widgets/amount_field.dart';
+import 'wallet_form_screen.dart';
 import 'widgets/common.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -48,10 +47,21 @@ class SettingsScreen extends StatelessWidget {
                 for (final w in store.wallets)
                   ListTile(
                     leading: Icon(walletIcon(w.type)),
-                    title: Text(w.name),
-                    subtitle: Text(
-                      'Solde de départ : ${formatFcfa(w.openingBalance)}',
+                    title: Row(
+                      children: [
+                        Flexible(child: Text(w.name)),
+                        if (w.isPrivate) ...[
+                          const SizedBox(width: 6),
+                          Icon(
+                            Icons.lock_outline,
+                            size: 16,
+                            semanticLabel: 'Privé',
+                            color: mif.textSecondary,
+                          ),
+                        ],
+                      ],
                     ),
+                    subtitle: Text(walletDescription(w)),
                     trailing: Text(
                       formatAmount(store.walletBalance(w.id)),
                       style: TextStyle(
@@ -59,8 +69,16 @@ class SettingsScreen extends StatelessWidget {
                         color: mif.text,
                       ),
                     ),
-                    onTap: () => _editWallet(context, store, w),
+                    onTap: () => WalletFormScreen.open(context, existing: w),
                   ),
+                ListTile(
+                  leading: Icon(Icons.add, color: mif.green),
+                  title: Text(
+                    'Ajouter un portefeuille',
+                    style: TextStyle(color: mif.green),
+                  ),
+                  onTap: () => WalletFormScreen.open(context),
+                ),
               ],
             ),
           ),
@@ -99,57 +117,6 @@ class SettingsScreen extends StatelessWidget {
     );
     controller.dispose();
     if (name != null && name.trim().isNotEmpty) await store.setMemberName(name);
-  }
-
-  Future<void> _editWallet(
-    BuildContext context,
-    BudgetStore store,
-    Wallet wallet,
-  ) async {
-    final name = TextEditingController(text: wallet.name);
-    final opening = TextEditingController(
-      text: wallet.openingBalance == 0
-          ? ''
-          : formatAmount(wallet.openingBalance),
-    );
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(wallet.name),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: name,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Nom'),
-            ),
-            const SizedBox(height: 12),
-            AmountField(controller: opening, label: 'Solde de départ'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuler'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Enregistrer'),
-          ),
-        ],
-      ),
-    );
-    if (saved == true) {
-      await store.updateWallet(
-        wallet.copyWith(
-          name: name.text.trim().isEmpty ? wallet.name : name.text.trim(),
-          openingBalance: parseAmount(opening.text) ?? 0,
-        ),
-      );
-    }
-    name.dispose();
-    opening.dispose();
   }
 }
 

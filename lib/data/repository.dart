@@ -10,6 +10,7 @@ import '../models/wallet.dart';
 /// Toutes les données du foyer, telles que lues au démarrage.
 class BudgetData {
   BudgetData({
+    this.version = schemaVersion,
     this.settings = const AppSettings(),
     List<Wallet>? wallets,
     List<Category>? categories,
@@ -20,13 +21,17 @@ class BudgetData {
        operations = operations ?? [],
        goals = goals ?? [];
 
+  /// Version du format lue dans le fichier (pour les reprises de données).
+  int version;
   AppSettings settings;
   final List<Wallet> wallets;
   final List<Category> categories;
   final List<Operation> operations;
   final List<SavingsGoal> goals;
 
-  static const schemaVersion = 1;
+  /// 2 : comptes épargne (rôle des portefeuilles), l'épargne devient un
+  /// virement vers un compte épargne.
+  static const schemaVersion = 2;
 
   Map<String, dynamic> toJson() => {
     'version': schemaVersion,
@@ -41,6 +46,7 @@ class BudgetData {
     List<Map<String, dynamic>> list(String key) =>
         ((j[key] as List?) ?? const []).cast<Map<String, dynamic>>();
     return BudgetData(
+      version: (j['version'] as num?)?.toInt() ?? 1,
       settings: AppSettings.fromJson(
         (j['reglages'] as Map?)?.cast<String, dynamic>() ?? const {},
       ),
@@ -69,17 +75,23 @@ class MemoryRepository implements BudgetRepository {
 
   final BudgetData data;
 
+  /// Toute écriture enregistre les données au format actuel.
+  void _touch() => data.version = BudgetData.schemaVersion;
+
   @override
   Future<BudgetData> load() async => BudgetData.fromJson(
     jsonDecode(jsonEncode(data.toJson())) as Map<String, dynamic>,
-  );
+  )..version = data.version;
 
   @override
-  Future<void> saveSettings(AppSettings settings) async =>
-      data.settings = settings;
+  Future<void> saveSettings(AppSettings settings) async {
+    _touch();
+    data.settings = settings;
+  }
 
   @override
   Future<void> upsertWallets(List<Wallet> wallets) async {
+    _touch();
     for (final w in wallets) {
       _upsert(data.wallets, w, (x) => x.id == w.id);
     }
@@ -87,18 +99,23 @@ class MemoryRepository implements BudgetRepository {
 
   @override
   Future<void> upsertCategories(List<Category> categories) async {
+    _touch();
     for (final c in categories) {
       _upsert(data.categories, c, (x) => x.id == c.id);
     }
   }
 
   @override
-  Future<void> upsertOperation(Operation operation) async =>
-      _upsert(data.operations, operation, (x) => x.id == operation.id);
+  Future<void> upsertOperation(Operation operation) async {
+    _touch();
+    _upsert(data.operations, operation, (x) => x.id == operation.id);
+  }
 
   @override
-  Future<void> upsertGoal(SavingsGoal goal) async =>
-      _upsert(data.goals, goal, (x) => x.id == goal.id);
+  Future<void> upsertGoal(SavingsGoal goal) async {
+    _touch();
+    _upsert(data.goals, goal, (x) => x.id == goal.id);
+  }
 }
 
 void _upsert<T>(List<T> list, T item, bool Function(T) same) {
@@ -127,6 +144,7 @@ class LocalJsonRepository extends MemoryRepository {
         final loaded = BudgetData.fromJson(
           jsonDecode(text) as Map<String, dynamic>,
         );
+        data.version = loaded.version;
         data.settings = loaded.settings;
         data.wallets
           ..clear()

@@ -61,7 +61,84 @@ class BudgetStore extends ChangeNotifier {
     DateTime Function()? clock,
   }) async {
     final data = await repo.load();
-    return BudgetStore._(repo, data, clock ?? DateTime.now);
+    final store = BudgetStore._(repo, data, clock ?? DateTime.now);
+    if (data.version < 2) await store._migrateToSavingsAccounts();
+    return store;
+  }
+
+  /// Version 0.3.0 → comptes épargne. Les épargnes étaient des enveloppes
+  /// dans les portefeuilles courants : on crée un portefeuille « Compte
+  /// épargne », on y rattache les objectifs, et chaque montant de départ,
+  /// versement ou retrait devient un virement vers (ou depuis) ce compte.
+  /// Le disponible reste donc le même qu'avant.
+  Future<void> _migrateToSavingsAccounts() async {
+    final legacyOps = _data.operations.where((o) => o.type.isSavings).toList();
+    // Objectifs encore rattachés à un portefeuille courant (ancien modèle).
+    final legacyGoals = _data.goals
+        .where((g) => !(wallet(g.walletId)?.isSavings ?? false))
+        .toList();
+    if (legacyGoals.isEmpty && legacyOps.isEmpty) {
+      _data.version = BudgetData.schemaVersion;
+      return;
+    }
+    final t = now();
+    final account = Wallet(
+      id: _uuid.v4(),
+      name: 'Compte épargne',
+      type: WalletType.bank,
+      role: WalletRole.savings,
+      sortOrder: _data.wallets.length,
+      updatedAt: t,
+    );
+    _data.wallets.add(account);
+    await _repo.upsertWallets([account]);
+    final fallback = wallets.where((w) => !w.isSavings).firstOrNull?.id;
+
+    for (final legacy in legacyGoals) {
+      final i = _data.goals.indexWhere((x) => x.id == legacy.id);
+      final g = _data.goals[i];
+      final from = g.walletId ?? fallback;
+      if (g.startAmount > 0) {
+        final op = Operation(
+          id: _uuid.v4(),
+          type: OperationType.transfer,
+          amount: g.startAmount,
+          date: dateOnly(g.createdAt),
+          sourceWalletId: from,
+          targetWalletId: account.id,
+          savingsGoalId: g.id,
+          note: "Reprise de l'épargne existante",
+          authorId: settings.memberId,
+          createdAt: t,
+          updatedAt: t,
+        );
+        _data.operations.add(op);
+        await _repo.upsertOperation(op);
+      }
+      _data.goals[i] = g.copyWith(
+        walletId: () => account.id,
+        startAmount: 0,
+        updatedAt: t,
+      );
+      await _repo.upsertGoal(_data.goals[i]);
+    }
+
+    for (final o in legacyOps) {
+      final deposit = o.type == OperationType.savingsDeposit;
+      final other =
+          (deposit ? o.sourceWalletId : o.targetWalletId) ??
+          goal(o.savingsGoalId)?.walletId ??
+          fallback;
+      final converted = o.copyWith(
+        type: OperationType.transfer,
+        sourceWalletId: () => deposit ? other : account.id,
+        targetWalletId: () => deposit ? account.id : other,
+        updatedAt: t,
+      );
+      _replace(converted);
+      await _repo.upsertOperation(converted);
+    }
+    _data.version = BudgetData.schemaVersion;
   }
 
   final BudgetRepository _repo;
@@ -75,9 +152,31 @@ class BudgetStore extends ChangeNotifier {
 
   AppSettings get settings => _data.settings;
 
+  /// Portefeuilles actifs : les courants d'abord, puis l'épargne.
   List<Wallet> get wallets =>
-      _data.wallets.where((w) => !w.archived).toList()
-        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      _data.wallets.where((w) => !w.archived).toList()..sort((a, b) {
+        final byRole = a.role.index.compareTo(b.role.index);
+        return byRole != 0 ? byRole : a.sortOrder.compareTo(b.sortOrder);
+      });
+
+  List<Wallet> get currentWallets =>
+      wallets.where((w) => !w.isSavings).toList();
+
+  List<Wallet> get savingsWallets => wallets.where((w) => w.isSavings).toList();
+
+  /// Tous les portefeuilles, archivés compris.
+  List<Wallet> get allWallets => List.unmodifiable(_data.wallets);
+
+  /// Sens d'un virement par rapport à l'épargne : +1 vers un compte
+  /// épargne, −1 depuis un compte épargne, 0 sinon.
+  int savingsDirection(Operation o) {
+    if (o.type != OperationType.transfer) return 0;
+    final from = wallet(o.sourceWalletId)?.isSavings ?? false;
+    final to = wallet(o.targetWalletId)?.isSavings ?? false;
+    if (to && !from) return 1;
+    if (from && !to) return -1;
+    return 0;
+  }
 
   Wallet? wallet(String? id) {
     for (final w in _data.wallets) {
@@ -135,7 +234,7 @@ class BudgetStore extends ChangeNotifier {
     final w = wallet(walletId);
     var balance = w?.openingBalance ?? 0;
     for (final o in _data.operations) {
-      // Une épargne reste dans son portefeuille : elle ne change pas le solde.
+      // Anciennes enveloppes (avant la reprise) : sans effet sur le solde.
       if (o.deleted || o.type.isSavings) continue;
       if (o.targetWalletId == walletId) balance += o.amount;
       if (o.sourceWalletId == walletId) balance -= o.amount;
@@ -150,19 +249,17 @@ class BudgetStore extends ChangeNotifier {
     var income = 0;
     var expense = 0;
     var saved = 0;
+    bool savingsWallet(String? id) => wallet(id)?.isSavings ?? false;
     for (final o in operationsInMonth(month)) {
-      switch (o.type) {
-        case OperationType.income:
-          income += o.amount;
-        case OperationType.expense:
-          expense += o.amount;
-        case OperationType.savingsDeposit:
-          saved += o.amount;
-        case OperationType.savingsWithdrawal:
-          saved -= o.amount;
-        case OperationType.transfer:
-          break;
-      }
+      if (o.type == OperationType.income) income += o.amount;
+      if (o.type == OperationType.expense) expense += o.amount;
+      if (o.type.isSavings) continue;
+      // Épargne du mois : ce que les comptes épargne ont reçu moins ce qui
+      // en est sorti (hors virements d'un compte épargne à un autre).
+      final into = savingsWallet(o.targetWalletId);
+      final outOf = savingsWallet(o.sourceWalletId);
+      if (into && !outOf) saved += o.amount;
+      if (outOf && !into) saved -= o.amount;
     }
     return MonthSummary(
       income: income,
@@ -186,22 +283,49 @@ class BudgetStore extends ChangeNotifier {
     return null;
   }
 
-  /// Montant épargné = montant de départ + versements − retraits.
-  int goalBalance(String goalId) {
-    var balance = goal(goalId)?.startAmount ?? 0;
+  /// Objectifs actifs rattachés à un compte épargne.
+  List<SavingsGoal> walletGoals(String walletId) =>
+      goals.where((g) => g.walletId == walletId).toList();
+
+  /// Entrées moins sorties du compte de l'objectif, marquées pour lui.
+  int _taggedFlow(SavingsGoal g) {
+    var flow = 0;
     for (final o in _data.operations) {
-      if (o.deleted || o.savingsGoalId != goalId) continue;
-      if (o.type == OperationType.savingsDeposit) balance += o.amount;
-      if (o.type == OperationType.savingsWithdrawal) balance -= o.amount;
+      if (o.deleted || o.savingsGoalId != g.id || o.type.isSavings) continue;
+      if (o.targetWalletId == g.walletId) flow += o.amount;
+      if (o.sourceWalletId == g.walletId) flow -= o.amount;
     }
-    return balance;
+    return flow;
   }
 
-  /// Total mis de côté dans les objectifs actifs.
-  int get totalSaved => goals.fold(0, (sum, g) => sum + goalBalance(g.id));
+  /// Montant épargné pour un objectif. Seul sur son compte, il en a tout le
+  /// solde ; à plusieurs, chacun a sa part de départ plus les mouvements
+  /// marqués pour lui.
+  int goalBalance(String goalId) {
+    final g = goal(goalId);
+    if (g == null) return 0;
+    final walletId = g.walletId;
+    if (walletId != null && !g.archived && walletGoals(walletId).length == 1) {
+      return walletBalance(walletId);
+    }
+    return g.startAmount + _taggedFlow(g);
+  }
 
-  /// Argent disponible : portefeuilles moins l'argent mis de côté.
-  int get available => totalBalance - totalSaved;
+  /// Part d'un compte épargne qui n'est attribuée à aucun objectif.
+  int unallocated(String walletId) {
+    final gs = walletGoals(walletId);
+    if (gs.length <= 1) return gs.isEmpty ? walletBalance(walletId) : 0;
+    return walletBalance(walletId) -
+        gs.fold(0, (sum, g) => sum + goalBalance(g.id));
+  }
+
+  /// Total des comptes épargne.
+  int get totalSaved =>
+      savingsWallets.fold(0, (sum, w) => sum + walletBalance(w.id));
+
+  /// Argent disponible : total des portefeuilles courants.
+  int get available =>
+      currentWallets.fold(0, (sum, w) => sum + walletBalance(w.id));
 
   /// Versement mensuel nécessaire pour atteindre la cible à la date cible
   /// (mois en cours compris) ; null sans date cible ou si c'est atteint.
@@ -230,6 +354,19 @@ class BudgetStore extends ChangeNotifier {
     return counted == 0 ? 0 : total ~/ counted;
   }
 
+  /// Quand un compte qui n'avait qu'un objectif en reçoit un deuxième, le
+  /// premier garde ce qu'il avait (tout le solde) moins la part de départ
+  /// [given] attribuée au nouveau.
+  Future<void> _splitSoleGoal(String walletId, int given) async {
+    final existing = walletGoals(walletId);
+    if (existing.length != 1) return;
+    final g = existing.first;
+    final keep = walletBalance(walletId) - given - _taggedFlow(g);
+    final updated = g.copyWith(startAmount: keep, updatedAt: now());
+    _data.goals[_data.goals.indexWhere((x) => x.id == g.id)] = updated;
+    await _repo.upsertGoal(updated);
+  }
+
   Future<SavingsGoal> addGoal({
     required String name,
     required int target,
@@ -238,6 +375,7 @@ class BudgetStore extends ChangeNotifier {
     int startAmount = 0,
     String icon = 'epargne',
   }) async {
+    if (walletId != null) await _splitSoleGoal(walletId, startAmount);
     final t = now();
     final g = SavingsGoal(
       id: _uuid.v4(),
@@ -260,6 +398,11 @@ class BudgetStore extends ChangeNotifier {
   }
 
   Future<void> updateGoal(SavingsGoal g) async {
+    final before = goal(g.id);
+    final movedTo = g.walletId;
+    if (!g.archived && movedTo != null && before?.walletId != movedTo) {
+      await _splitSoleGoal(movedTo, g.startAmount);
+    }
     final updated = g.copyWith(updatedAt: now());
     final i = _data.goals.indexWhere((x) => x.id == g.id);
     if (i >= 0) _data.goals[i] = updated;
@@ -267,9 +410,30 @@ class BudgetStore extends ChangeNotifier {
     await _repo.upsertGoal(updated);
   }
 
-  /// Opérations d'un objectif, les plus récentes d'abord.
-  List<Operation> goalOperations(String goalId) =>
-      operations.where((o) => o.savingsGoalId == goalId).toList();
+  /// Mouvements d'un objectif, les plus récents d'abord : ceux marqués pour
+  /// lui, ou tous ceux de son compte s'il y est seul.
+  List<Operation> goalOperations(String goalId) {
+    final g = goal(goalId);
+    if (g == null) return const [];
+    final walletId = g.walletId;
+    final sole = walletId != null && walletGoals(walletId).length == 1;
+    return operations
+        .where(
+          (o) =>
+              o.savingsGoalId == goalId ||
+              (sole &&
+                  (o.sourceWalletId == walletId ||
+                      o.targetWalletId == walletId)),
+        )
+        .toList();
+  }
+
+  /// Mouvements d'un portefeuille, les plus récents d'abord.
+  List<Operation> walletOperations(String walletId) => operations
+      .where(
+        (o) => o.sourceWalletId == walletId || o.targetWalletId == walletId,
+      )
+      .toList();
 
   /// Résumés des [count] mois se terminant par [month], du plus ancien au
   /// plus récent.
@@ -476,6 +640,32 @@ class BudgetStore extends ChangeNotifier {
     _data.settings = _data.settings.copyWith(memberName: name.trim());
     notifyListeners();
     await _repo.saveSettings(_data.settings);
+  }
+
+  Future<Wallet> addWallet({
+    required String name,
+    required WalletType type,
+    WalletRole role = WalletRole.current,
+    int openingBalance = 0,
+    bool shared = true,
+    bool private = false,
+  }) async {
+    final w = Wallet(
+      id: _uuid.v4(),
+      name: name.trim(),
+      type: type,
+      role: role,
+      openingBalance: openingBalance,
+      shared: shared,
+      ownerId: shared ? null : settings.memberId,
+      private: !shared && private,
+      sortOrder: _data.wallets.length,
+      updatedAt: now(),
+    );
+    _data.wallets.add(w);
+    notifyListeners();
+    await _repo.upsertWallets([w]);
+    return w;
   }
 
   Future<void> updateWallet(Wallet wallet) async {

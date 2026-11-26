@@ -11,16 +11,32 @@ enum WalletType {
       values.firstWhere((t) => t.code == code, orElse: () => cash);
 }
 
-/// Portefeuille : espèces, banque ou Mobile Money. Le solde n'est jamais
-/// stocké : il est recalculé à partir du solde de départ et des opérations.
+/// Rôle d'un portefeuille : l'argent de tous les jours, ou l'épargne.
+enum WalletRole {
+  current('courant', 'Courant'),
+  savings('epargne', 'Épargne');
+
+  const WalletRole(this.code, this.label);
+  final String code;
+  final String label;
+
+  static WalletRole fromCode(String? code) =>
+      values.firstWhere((r) => r.code == code, orElse: () => current);
+}
+
+/// Portefeuille : un compte bancaire, une caisse d'espèces ou un compte
+/// Mobile Money. Le solde n'est jamais stocké : il est recalculé à partir du
+/// solde de départ et des opérations.
 class Wallet {
   const Wallet({
     required this.id,
     required this.name,
     required this.type,
+    this.role = WalletRole.current,
     this.openingBalance = 0,
     this.shared = true,
     this.ownerId,
+    this.private = false,
     this.monthlyAmount,
     this.archived = false,
     this.sortOrder = 0,
@@ -30,11 +46,16 @@ class Wallet {
   final String id;
   final String name;
   final WalletType type;
+  final WalletRole role;
   final int openingBalance;
 
-  /// Commun (visible des deux) ou personnel.
+  /// Commun au foyer (visible des deux) ou personnel à [ownerId].
   final bool shared;
   final String? ownerId;
+
+  /// Portefeuille personnel privé : son propriétaire seul le voit, avec ses
+  /// opérations. Sans effet sur un portefeuille commun.
+  final bool private;
 
   /// Montant mensuel d'un portefeuille personnel (argent personnel).
   final int? monthlyAmount;
@@ -42,10 +63,17 @@ class Wallet {
   final int sortOrder;
   final DateTime updatedAt;
 
+  bool get isSavings => role == WalletRole.savings;
+  bool get isPrivate => !shared && private;
+
   Wallet copyWith({
     String? name,
     WalletType? type,
+    WalletRole? role,
     int? openingBalance,
+    bool? shared,
+    String? Function()? ownerId,
+    bool? private,
     bool? archived,
     int? sortOrder,
     DateTime? updatedAt,
@@ -53,9 +81,11 @@ class Wallet {
     id: id,
     name: name ?? this.name,
     type: type ?? this.type,
+    role: role ?? this.role,
     openingBalance: openingBalance ?? this.openingBalance,
-    shared: shared,
-    ownerId: ownerId,
+    shared: shared ?? this.shared,
+    ownerId: ownerId != null ? ownerId() : this.ownerId,
+    private: private ?? this.private,
     monthlyAmount: monthlyAmount,
     archived: archived ?? this.archived,
     sortOrder: sortOrder ?? this.sortOrder,
@@ -66,9 +96,11 @@ class Wallet {
     'id': id,
     'nom': name,
     'type': type.code,
+    'role': role.code,
     'soldeDepart': openingBalance,
     'commun': shared,
     'proprietaire': ownerId,
+    'prive': private,
     'montantMensuel': monthlyAmount,
     'archive': archived,
     'ordre': sortOrder,
@@ -79,9 +111,11 @@ class Wallet {
     id: j['id'] as String,
     name: j['nom'] as String,
     type: WalletType.fromCode(j['type'] as String),
+    role: WalletRole.fromCode(j['role'] as String?),
     openingBalance: (j['soldeDepart'] as num?)?.toInt() ?? 0,
     shared: j['commun'] as bool? ?? true,
     ownerId: j['proprietaire'] as String?,
+    private: j['prive'] as bool? ?? false,
     monthlyAmount: (j['montantMensuel'] as num?)?.toInt(),
     archived: j['archive'] as bool? ?? false,
     sortOrder: (j['ordre'] as num?)?.toInt() ?? 0,
