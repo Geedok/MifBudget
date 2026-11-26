@@ -75,7 +75,7 @@ void main() {
       await store.completeSetup(
         memberName: 'Eudokia',
         cash: 22000,
-        bank: 412000,
+        bank: 3412000,
         mobileMoney: 58300,
       );
       await store.setTheme(dark ? ThemeChoice.dark : ThemeChoice.light);
@@ -191,6 +191,31 @@ void main() {
         );
       }
 
+      final surete = await store.addGoal(
+        name: 'Épargne de sûreté',
+        target: 1500000,
+        walletId: DefaultIds.walletBank,
+        startAmount: 800000,
+        icon: 'surete',
+      );
+      final construction = await store.addGoal(
+        name: 'Épargne de construction',
+        target: 8000000,
+        targetDate: DateTime(2028, 12),
+        walletId: DefaultIds.walletBank,
+        startAmount: 2200000,
+        icon: 'construction',
+      );
+      for (final (g, a) in [(surete, 100000), (construction, 200000)]) {
+        await store.addOperation(
+          type: OperationType.savingsDeposit,
+          amount: a,
+          date: clock.subtract(const Duration(days: 3)),
+          savingsGoalId: g.id,
+          sourceWalletId: DefaultIds.walletBank,
+        );
+      }
+
       await shot(tester, '1-accueil-$suffix');
       await tester.drag(find.byType(Scrollable).first, const Offset(0, -420));
       await shot(tester, '1b-accueil-revenus-$suffix');
@@ -208,6 +233,18 @@ void main() {
 
       await tester.tap(find.text('Opérations').last);
       await shot(tester, '3-operations-$suffix');
+
+      await tester.tap(find.text('Épargnes').last);
+      await shot(tester, '5-epargnes-$suffix');
+      await tester.tap(find.byTooltip('Ajouter une opération'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Épargne'));
+      for (final k in ['1', '0', '0', '000']) {
+        await tester.tap(find.byKey(Key('touche-$k')));
+      }
+      await shot(tester, '6-saisie-epargne-$suffix');
+      await tester.tap(find.byTooltip('Fermer'));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.text('Rapports'));
       await shot(tester, '4-bilan-$suffix');

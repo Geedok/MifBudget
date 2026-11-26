@@ -257,4 +257,97 @@ void main() {
     expect(find.text('Septembre 2026'), findsOneWidget);
     expect(find.text('Rien en août'), findsOneWidget);
   });
+
+  testWidgets("créer l'épargne de sûreté puis y verser de l'argent", (
+    tester,
+  ) async {
+    final store = await pumpApp(tester);
+    await tester.tap(find.text('Épargnes').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Créez vos épargnes'), findsOneWidget);
+
+    await tester.tap(find.text('Épargne de sûreté'));
+    await tester.pumpAndSettle();
+    expect(find.text('Nouvelle épargne'), findsOneWidget);
+    expect(find.text('Saisir le montant cible'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Montant cible'),
+      '1500000',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Déjà mis de côté (facultatif)'),
+      '5000',
+    );
+    await tester.pump();
+    await tester.tap(find.text('Espèces'));
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+
+    final goal = store.goals.single;
+    expect(goal.name, 'Épargne de sûreté');
+    expect(goal.target, 1500000);
+    expect(goal.icon, 'surete');
+    expect(goal.walletId, DefaultIds.walletCash);
+    expect(
+      find.text('Il reste 1${nbsp}495${nbsp}000${nbsp}FCFA'),
+      findsOneWidget,
+    );
+
+    // Verser 10 000 depuis la carte.
+    await tester.tap(find.text('Verser'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Déjà mis de côté : 5${nbsp}000${nbsp}FCFA'),
+      findsOneWidget,
+    );
+    await type(tester, ['1', '0', '000']);
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(find.text('10${nbsp}000${nbsp}FCFA mis de côté'), findsOneWidget);
+    expect(store.goalBalance(goal.id), 15000);
+    expect(store.walletBalance(DefaultIds.walletCash), 20000);
+    expect(store.available, 5000);
+
+    // Retirer plus que l'épargne est refusé.
+    await tester.tap(find.text('Retirer'));
+    await tester.pumpAndSettle();
+    await type(tester, ['2', '0', '000']);
+    expect(find.text('Maximum 15${nbsp}000${nbsp}FCFA'), findsOneWidget);
+    await type(tester, ['⌫', '⌫', '⌫', '⌫']);
+    await type(tester, ['000']);
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(store.goalBalance(goal.id), 13000);
+
+    // L'accueil montre le disponible et l'épargne.
+    await tester.tap(find.text('Accueil'));
+    await tester.pumpAndSettle();
+    expect(find.text('Disponible'), findsOneWidget);
+    expect(find.text('7${nbsp}000${nbsp}FCFA'), findsOneWidget);
+    expect(find.text('13${nbsp}000 sur 1${nbsp}500${nbsp}000${nbsp}FCFA'), findsOneWidget);
+  });
+
+  testWidgets("l'onglet Épargne de la saisie rapide", (tester) async {
+    final store = await pumpApp(tester);
+    final g = await store.addGoal(
+      name: 'Construction',
+      target: 8000000,
+      walletId: DefaultIds.walletBank,
+      icon: 'construction',
+    );
+    await tester.tap(find.byTooltip('Ajouter une opération'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Épargne'));
+    await tester.pump();
+    await type(tester, ['2', '5', '000']);
+    // Une seule épargne : déjà choisie, avec son portefeuille.
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    final op = store.operations.single;
+    expect(op.type, OperationType.savingsDeposit);
+    expect(op.savingsGoalId, g.id);
+    expect(op.sourceWalletId, DefaultIds.walletBank);
+    expect(store.goalBalance(g.id), 25000);
+    expect(find.text('Construction'), findsWidgets);
+  });
 }

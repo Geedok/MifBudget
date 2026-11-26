@@ -6,16 +6,25 @@ import '../data/defaults.dart';
 import '../data/repository.dart';
 import '../models/category.dart';
 import '../models/operation.dart';
+import '../models/savings_goal.dart';
 import '../models/settings.dart';
 import '../models/wallet.dart';
 
 class MonthSummary {
-  const MonthSummary({required this.income, required this.expense, this.month});
+  const MonthSummary({
+    required this.income,
+    required this.expense,
+    this.saved = 0,
+    this.month,
+  });
 
   /// Premier jour du mois concerné (si connu).
   final DateTime? month;
   final int income;
   final int expense;
+
+  /// Mis de côté dans le mois : versements moins retraits d'épargne.
+  final int saved;
   int get balance => income - expense;
 
   /// Part des revenus déjà dépensée (0 si aucun revenu).
@@ -126,7 +135,8 @@ class BudgetStore extends ChangeNotifier {
     final w = wallet(walletId);
     var balance = w?.openingBalance ?? 0;
     for (final o in _data.operations) {
-      if (o.deleted) continue;
+      // Une épargne reste dans son portefeuille : elle ne change pas le solde.
+      if (o.deleted || o.type.isSavings) continue;
       if (o.targetWalletId == walletId) balance += o.amount;
       if (o.sourceWalletId == walletId) balance -= o.amount;
     }
@@ -139,22 +149,133 @@ class BudgetStore extends ChangeNotifier {
   MonthSummary monthSummary(DateTime month) {
     var income = 0;
     var expense = 0;
+    var saved = 0;
     for (final o in operationsInMonth(month)) {
-      if (o.type == OperationType.income) income += o.amount;
-      if (o.type == OperationType.expense) expense += o.amount;
+      switch (o.type) {
+        case OperationType.income:
+          income += o.amount;
+        case OperationType.expense:
+          expense += o.amount;
+        case OperationType.savingsDeposit:
+          saved += o.amount;
+        case OperationType.savingsWithdrawal:
+          saved -= o.amount;
+        case OperationType.transfer:
+          break;
+      }
     }
-    return MonthSummary(income: income, expense: expense);
+    return MonthSummary(
+      income: income,
+      expense: expense,
+      saved: saved,
+      month: DateTime(month.year, month.month),
+    );
   }
+
+  // ---------------------------------------------------------------- Épargne
+
+  /// Objectifs d'épargne actifs, dans l'ordre choisi.
+  List<SavingsGoal> get goals =>
+      _data.goals.where((g) => !g.archived).toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+
+  SavingsGoal? goal(String? id) {
+    for (final g in _data.goals) {
+      if (g.id == id) return g;
+    }
+    return null;
+  }
+
+  /// Montant épargné = montant de départ + versements − retraits.
+  int goalBalance(String goalId) {
+    var balance = goal(goalId)?.startAmount ?? 0;
+    for (final o in _data.operations) {
+      if (o.deleted || o.savingsGoalId != goalId) continue;
+      if (o.type == OperationType.savingsDeposit) balance += o.amount;
+      if (o.type == OperationType.savingsWithdrawal) balance -= o.amount;
+    }
+    return balance;
+  }
+
+  /// Total mis de côté dans les objectifs actifs.
+  int get totalSaved => goals.fold(0, (sum, g) => sum + goalBalance(g.id));
+
+  /// Argent disponible : portefeuilles moins l'argent mis de côté.
+  int get available => totalBalance - totalSaved;
+
+  /// Versement mensuel nécessaire pour atteindre la cible à la date cible
+  /// (mois en cours compris) ; null sans date cible ou si c'est atteint.
+  int? monthlyNeeded(SavingsGoal g) {
+    final date = g.targetDate;
+    if (date == null) return null;
+    final remaining = g.target - goalBalance(g.id);
+    if (remaining <= 0) return null;
+    final t = now();
+    final months = (date.year - t.year) * 12 + date.month - t.month + 1;
+    if (months <= 0) return remaining;
+    return (remaining / months).ceil();
+  }
+
+  /// Dépenses mensuelles moyennes des 3 derniers mois complets (0 si aucune).
+  int averageMonthlyExpense({int months = 3}) {
+    final t = now();
+    var total = 0;
+    var counted = 0;
+    for (var i = 1; i <= months; i++) {
+      final m = monthSummary(DateTime(t.year, t.month - i));
+      if (m.expense == 0) continue;
+      total += m.expense;
+      counted++;
+    }
+    return counted == 0 ? 0 : total ~/ counted;
+  }
+
+  Future<SavingsGoal> addGoal({
+    required String name,
+    required int target,
+    DateTime? targetDate,
+    String? walletId,
+    int startAmount = 0,
+    String icon = 'epargne',
+  }) async {
+    final t = now();
+    final g = SavingsGoal(
+      id: _uuid.v4(),
+      name: name.trim(),
+      target: target,
+      targetDate: targetDate == null
+          ? null
+          : DateTime(targetDate.year, targetDate.month),
+      walletId: walletId,
+      startAmount: startAmount,
+      icon: icon,
+      sortOrder: _data.goals.length,
+      createdAt: t,
+      updatedAt: t,
+    );
+    _data.goals.add(g);
+    notifyListeners();
+    await _repo.upsertGoal(g);
+    return g;
+  }
+
+  Future<void> updateGoal(SavingsGoal g) async {
+    final updated = g.copyWith(updatedAt: now());
+    final i = _data.goals.indexWhere((x) => x.id == g.id);
+    if (i >= 0) _data.goals[i] = updated;
+    notifyListeners();
+    await _repo.upsertGoal(updated);
+  }
+
+  /// Opérations d'un objectif, les plus récentes d'abord.
+  List<Operation> goalOperations(String goalId) =>
+      operations.where((o) => o.savingsGoalId == goalId).toList();
 
   /// Résumés des [count] mois se terminant par [month], du plus ancien au
   /// plus récent.
   List<MonthSummary> recentMonths(DateTime month, {int count = 6}) => [
     for (var i = count - 1; i >= 0; i--)
-      () {
-        final m = DateTime(month.year, month.month - i);
-        final s = monthSummary(m);
-        return MonthSummary(income: s.income, expense: s.expense, month: m);
-      }(),
+      monthSummary(DateTime(month.year, month.month - i)),
   ];
 
   /// Revenus (ou dépenses) du mois regroupés par catégorie principale, du
@@ -281,6 +402,7 @@ class BudgetStore extends ChangeNotifier {
     String? categoryId,
     String? sourceWalletId,
     String? targetWalletId,
+    String? savingsGoalId,
     String note = '',
   }) async {
     final t = now();
@@ -292,6 +414,7 @@ class BudgetStore extends ChangeNotifier {
       categoryId: categoryId,
       sourceWalletId: sourceWalletId,
       targetWalletId: targetWalletId,
+      savingsGoalId: savingsGoalId,
       note: note.trim(),
       authorId: settings.memberId,
       createdAt: t,

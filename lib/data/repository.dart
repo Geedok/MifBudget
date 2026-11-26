@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../models/category.dart';
 import '../models/operation.dart';
+import '../models/savings_goal.dart';
 import '../models/settings.dart';
 import '../models/wallet.dart';
 
@@ -13,14 +14,17 @@ class BudgetData {
     List<Wallet>? wallets,
     List<Category>? categories,
     List<Operation>? operations,
+    List<SavingsGoal>? goals,
   }) : wallets = wallets ?? [],
        categories = categories ?? [],
-       operations = operations ?? [];
+       operations = operations ?? [],
+       goals = goals ?? [];
 
   AppSettings settings;
   final List<Wallet> wallets;
   final List<Category> categories;
   final List<Operation> operations;
+  final List<SavingsGoal> goals;
 
   static const schemaVersion = 1;
 
@@ -30,6 +34,7 @@ class BudgetData {
     'portefeuilles': wallets.map((w) => w.toJson()).toList(),
     'categories': categories.map((c) => c.toJson()).toList(),
     'operations': operations.map((o) => o.toJson()).toList(),
+    'objectifsEpargne': goals.map((g) => g.toJson()).toList(),
   };
 
   factory BudgetData.fromJson(Map<String, dynamic> j) {
@@ -42,6 +47,7 @@ class BudgetData {
       wallets: list('portefeuilles').map(Wallet.fromJson).toList(),
       categories: list('categories').map(Category.fromJson).toList(),
       operations: list('operations').map(Operation.fromJson).toList(),
+      goals: list('objectifsEpargne').map(SavingsGoal.fromJson).toList(),
     );
   }
 }
@@ -54,6 +60,7 @@ abstract class BudgetRepository {
   Future<void> upsertWallets(List<Wallet> wallets);
   Future<void> upsertCategories(List<Category> categories);
   Future<void> upsertOperation(Operation operation);
+  Future<void> upsertGoal(SavingsGoal goal);
 }
 
 /// Stockage en mémoire, pour les tests.
@@ -88,6 +95,10 @@ class MemoryRepository implements BudgetRepository {
   @override
   Future<void> upsertOperation(Operation operation) async =>
       _upsert(data.operations, operation, (x) => x.id == operation.id);
+
+  @override
+  Future<void> upsertGoal(SavingsGoal goal) async =>
+      _upsert(data.goals, goal, (x) => x.id == goal.id);
 }
 
 void _upsert<T>(List<T> list, T item, bool Function(T) same) {
@@ -126,6 +137,9 @@ class LocalJsonRepository extends MemoryRepository {
         data.operations
           ..clear()
           ..addAll(loaded.operations);
+        data.goals
+          ..clear()
+          ..addAll(loaded.goals);
       }
     }
     return super.load();
@@ -162,6 +176,12 @@ class LocalJsonRepository extends MemoryRepository {
   @override
   Future<void> upsertOperation(Operation operation) async {
     await super.upsertOperation(operation);
+    await _write();
+  }
+
+  @override
+  Future<void> upsertGoal(SavingsGoal goal) async {
+    await super.upsertGoal(goal);
     await _write();
   }
 }

@@ -29,6 +29,7 @@ class QuickEntryScreen extends StatefulWidget {
     super.key,
     this.existing,
     this.initialType = OperationType.expense,
+    this.initialGoalId,
   });
 
   /// Opération à modifier ; null pour une nouvelle saisie.
@@ -37,15 +38,22 @@ class QuickEntryScreen extends StatefulWidget {
   /// Type proposé pour une nouvelle saisie.
   final OperationType initialType;
 
+  /// Épargne présélectionnée (versement ou retrait).
+  final String? initialGoalId;
+
   static Future<EntryResult?> open(
     BuildContext context, {
     Operation? existing,
     OperationType initialType = OperationType.expense,
+    String? initialGoalId,
   }) => Navigator.of(context).push<EntryResult>(
     MaterialPageRoute(
       fullscreenDialog: true,
-      builder: (_) =>
-          QuickEntryScreen(existing: existing, initialType: initialType),
+      builder: (_) => QuickEntryScreen(
+        existing: existing,
+        initialType: initialType,
+        initialGoalId: initialGoalId,
+      ),
     ),
   );
 
@@ -59,7 +67,8 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
   late OperationType _type;
   String _digits = '';
   String? _categoryId;
-  String? _walletId; // dépense : débité ; revenu : crédité
+  String? _walletId; // dépense : débité ; revenu : crédité ; épargne : lieu
+  String? _goalId; // épargne
   String? _fromId; // transfert
   String? _toId; // transfert
   late DateTime _date;
@@ -82,9 +91,12 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       _categoryId = e.categoryId;
       _date = e.date;
       _note.text = e.note;
+      _goalId = e.savingsGoalId;
       if (e.type == OperationType.transfer) {
         _fromId = e.sourceWalletId;
         _toId = e.targetWalletId;
+      } else if (e.type.isSavings) {
+        _walletId = e.sourceWalletId ?? e.targetWalletId;
       } else {
         _walletId = e.type == OperationType.income
             ? e.targetWalletId
@@ -93,6 +105,8 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     } else {
       _type = widget.initialType;
       _date = dateOnly(store.now());
+      _goalId = widget.initialGoalId;
+      if (_type.isSavings) _goalId ??= _singleGoal(store);
       _applyDefaultWallets(store);
     }
   }
@@ -107,7 +121,11 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     final wallets = store.wallets;
     if (wallets.isEmpty) return;
     String fallback(String? id) => id ?? wallets.first.id;
-    if (_type == OperationType.transfer) {
+    if (_type.isSavings) {
+      _walletId = fallback(
+        store.goal(_goalId)?.walletId ?? store.lastWalletFor(_type),
+      );
+    } else if (_type == OperationType.transfer) {
       _fromId ??= fallback(store.lastWalletFor(OperationType.transfer));
       _toId ??= wallets
           .firstWhere((w) => w.id != _fromId, orElse: () => wallets.first)
@@ -119,6 +137,23 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
 
   int get _amount => int.tryParse(_digits) ?? 0;
 
+  String? _singleGoal(BudgetStore store) {
+    final goals = store.goals;
+    return goals.length == 1 ? goals.first.id : null;
+  }
+
+  /// Ce qu'on peut retirer de l'épargne choisie (en modification, le retrait
+  /// en cours compte comme déjà rendu).
+  int _withdrawable(BudgetStore store) {
+    var balance = store.goalBalance(_goalId!);
+    final e = widget.existing;
+    if (e != null && e.savingsGoalId == _goalId && !e.deleted) {
+      if (e.type == OperationType.savingsWithdrawal) balance += e.amount;
+      if (e.type == OperationType.savingsDeposit) balance -= e.amount;
+    }
+    return balance;
+  }
+
   CategoryKind get _kind => _type == OperationType.income
       ? CategoryKind.income
       : CategoryKind.expense;
@@ -128,6 +163,15 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     if (_type == OperationType.transfer) {
       if (_fromId == null || _toId == null) return 'Choisir les portefeuilles';
       if (_fromId == _toId) return 'Choisir deux portefeuilles différents';
+      return null;
+    }
+    if (_type.isSavings) {
+      if (_goalId == null) return 'Choisir une épargne';
+      if (_type == OperationType.savingsWithdrawal) {
+        final max = _withdrawable(StoreScope.read(context));
+        if (_amount > max) return 'Maximum ${formatFcfa(max < 0 ? 0 : max)}';
+      }
+      if (_walletId == null) return 'Choisir un portefeuille';
       return null;
     }
     if (_categoryId == null) return 'Choisir une catégorie';
@@ -141,8 +185,12 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       final kindChanged =
           (type == OperationType.income) != (_type == OperationType.income);
       _type = type;
-      if (kindChanged || type == OperationType.transfer) _categoryId = null;
-      _applyDefaultWallets(StoreScope.read(context));
+      if (kindChanged || type == OperationType.transfer || type.isSavings) {
+        _categoryId = null;
+      }
+      final store = StoreScope.read(context);
+      if (type.isSavings) _goalId ??= _singleGoal(store);
+      _applyDefaultWallets(store);
     });
   }
 
@@ -160,13 +208,13 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     setState(() => _saving = true);
     final store = StoreScope.read(context);
     final isTransfer = _type == OperationType.transfer;
-    final source = isTransfer
-        ? _fromId
-        : (_type == OperationType.income ? null : _walletId);
-    final target = isTransfer
-        ? _toId
-        : (_type == OperationType.income ? _walletId : null);
-    final category = isTransfer ? null : _categoryId;
+    final incoming =
+        _type == OperationType.income ||
+        _type == OperationType.savingsWithdrawal;
+    final source = isTransfer ? _fromId : (incoming ? null : _walletId);
+    final target = isTransfer ? _toId : (incoming ? _walletId : null);
+    final category = isTransfer || _type.isSavings ? null : _categoryId;
+    final goalId = _type.isSavings ? _goalId : null;
     final EntryResult result;
     if (_editing) {
       final updated = widget.existing!.copyWith(
@@ -176,6 +224,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         categoryId: () => category,
         sourceWalletId: () => source,
         targetWalletId: () => target,
+        savingsGoalId: () => goalId,
         note: _note.text.trim(),
       );
       await store.updateOperation(updated);
@@ -188,6 +237,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         categoryId: category,
         sourceWalletId: source,
         targetWalletId: target,
+        savingsGoalId: goalId,
         note: _note.text,
       );
       result = EntryResult(op, created: true);
@@ -263,7 +313,24 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                 children: [
-                  if (_type != OperationType.transfer) ...[
+                  if (_type.isSavings) ...[
+                    _SavingsFields(
+                      type: _type,
+                      goalId: _goalId,
+                      onType: (t) => setState(() => _type = t),
+                      onGoal: (id) => setState(() {
+                        _goalId = id;
+                        _applyDefaultWallets(store);
+                      }),
+                    ),
+                    const SizedBox(height: 12),
+                    _Label("Portefeuille où se trouve l'argent"),
+                    _WalletChips(
+                      wallets: store.wallets,
+                      selectedId: _walletId,
+                      onSelected: (id) => setState(() => _walletId = id),
+                    ),
+                  ] else if (_type != OperationType.transfer) ...[
                     _Label('Catégorie'),
                     _CategoryGrid(
                       kind: _kind,
@@ -380,7 +447,10 @@ class _TypeSelector extends StatelessWidget {
       OperationType.expense,
       OperationType.income,
       OperationType.transfer,
+      OperationType.savingsDeposit,
     ];
+    bool isSelected(OperationType t) =>
+        t == value || (t.isSavings && value.isSavings);
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
@@ -392,26 +462,31 @@ class _TypeSelector extends StatelessWidget {
           for (final t in types)
             Expanded(
               child: Semantics(
-                selected: t == value,
+                selected: isSelected(t),
                 button: true,
                 child: GestureDetector(
-                  onTap: () => onChanged(t),
+                  onTap: () =>
+                      onChanged(t.isSavings && value.isSavings ? value : t),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
                     height: 40,
                     alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: BoxDecoration(
-                      color: t == value ? mif.card : Colors.transparent,
+                      color: isSelected(t) ? mif.card : Colors.transparent,
                       borderRadius: BorderRadius.circular(9),
                     ),
-                    child: Text(
-                      t.label,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: t == value
-                            ? FontWeight.w600
-                            : FontWeight.w500,
-                        color: t == value ? mif.text : mif.textSecondary,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        t.isSavings ? 'Épargne' : t.label,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: isSelected(t)
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                          color: isSelected(t) ? mif.text : mif.textSecondary,
+                        ),
                       ),
                     ),
                   ),
@@ -420,6 +495,85 @@ class _TypeSelector extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// Épargne : verser ou retirer, et sur quel objectif.
+class _SavingsFields extends StatelessWidget {
+  const _SavingsFields({
+    required this.type,
+    required this.goalId,
+    required this.onType,
+    required this.onGoal,
+  });
+
+  final OperationType type;
+  final String? goalId;
+  final ValueChanged<OperationType> onType;
+  final ValueChanged<String> onGoal;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final mif = context.mif;
+    final goals = store.goals;
+    final selected = store.goal(goalId);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _Chip(
+                label: 'Verser',
+                icon: Icons.arrow_downward,
+                expand: true,
+                selected: type == OperationType.savingsDeposit,
+                onTap: () => onType(OperationType.savingsDeposit),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _Chip(
+                label: 'Retirer',
+                icon: Icons.arrow_upward,
+                expand: true,
+                selected: type == OperationType.savingsWithdrawal,
+                onTap: () => onType(OperationType.savingsWithdrawal),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _Label('Épargne'),
+        if (goals.isEmpty)
+          Text(
+            "Aucune épargne pour l'instant : créez-en une dans l'onglet Épargnes.",
+            style: TextStyle(fontSize: 14, color: mif.textSecondary),
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final g in goals)
+                _Chip(
+                  label: g.name,
+                  icon: goalIcon(g.icon),
+                  selected: g.id == goalId,
+                  onTap: () => onGoal(g.id),
+                ),
+            ],
+          ),
+        if (selected != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Déjà mis de côté : ${formatFcfa(store.goalBalance(selected.id))}',
+            style: TextStyle(fontSize: 12, color: mif.textSecondary),
+          ),
+        ],
+      ],
     );
   }
 }

@@ -5,6 +5,7 @@ import '../state/budget_store.dart';
 import '../theme.dart';
 import 'home_shell.dart';
 import 'settings_screen.dart';
+import 'widgets/charts.dart';
 import 'widgets/common.dart';
 import 'widgets/income_card.dart';
 
@@ -13,10 +14,12 @@ class HomeScreen extends StatelessWidget {
     super.key,
     required this.onSeeAllOperations,
     required this.onOpenReport,
+    required this.onOpenSavings,
   });
 
   final VoidCallback onSeeAllOperations;
   final VoidCallback onOpenReport;
+  final VoidCallback onOpenSavings;
 
   @override
   Widget build(BuildContext context) {
@@ -93,7 +96,7 @@ class HomeScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Solde total',
+                    'Disponible',
                     style: TextStyle(
                       fontSize: 13,
                       color: onGreen.withValues(alpha: 0.85),
@@ -104,19 +107,30 @@ class HomeScreen extends StatelessWidget {
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      formatFcfa(store.totalBalance),
+                      formatFcfa(store.available),
                       style: const TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
+                  if (store.available < 0) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Plus d\'argent mis de côté que dans les portefeuilles : '
+                      'vérifiez les soldes de départ dans les Réglages.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: onGreen.withValues(alpha: 0.9),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 14),
                   Row(
                     children: [
-                      _Figure('Revenus du mois', month.income, onGreen),
+                      _Figure('Portefeuilles', store.totalBalance, onGreen),
+                      _Figure('Mis de côté', store.totalSaved, onGreen),
                       _Figure('Dépenses du mois', month.expense, onGreen),
-                      _Figure('Reste du mois', month.balance, onGreen),
                     ],
                   ),
                 ],
@@ -171,6 +185,8 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           IncomeCard(onOpenReport: onOpenReport),
+          const SizedBox(height: 12),
+          _SavingsCard(onOpenSavings: onOpenSavings),
           const SizedBox(height: 12),
           MifCard(
             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -244,4 +260,74 @@ class _Figure extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// Accueil : progression de chaque épargne.
+class _SavingsCard extends StatelessWidget {
+  const _SavingsCard({required this.onOpenSavings});
+
+  final VoidCallback onOpenSavings;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final mif = context.mif;
+    final goals = store.goals;
+    return MifCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SectionTitle(
+            'Épargnes',
+            trailing: TextButton(
+              onPressed: onOpenSavings,
+              child: Text(goals.isEmpty ? 'Créer' : 'Voir tout'),
+            ),
+          ),
+          if (goals.isEmpty)
+            Text(
+              "Aucune épargne pour l'instant. Créez l'épargne de sûreté et l'épargne de construction.",
+              style: TextStyle(fontSize: 14, color: mif.textSecondary),
+            ),
+          for (final g in goals) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    g.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 14, color: mif.text),
+                  ),
+                ),
+                Text(
+                  formatPercent(
+                    g.target == 0 ? 0 : store.goalBalance(g.id) / g.target,
+                  ),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: mif.text,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ValueBar(
+              fraction: g.target == 0 ? 0 : store.goalBalance(g.id) / g.target,
+              color: mif.green,
+              height: 8,
+              track: true,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${formatAmount(store.goalBalance(g.id))} sur ${formatFcfa(g.target)}',
+              style: TextStyle(fontSize: 12, color: mif.textSecondary),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }

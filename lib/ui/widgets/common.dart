@@ -28,6 +28,20 @@ const categoryIcons = <String, IconData>{
   'autres_revenus': Icons.payments_outlined,
 };
 
+/// Icônes proposées pour les objectifs d'épargne.
+const goalIcons = <String, IconData>{
+  'epargne': Icons.savings_outlined,
+  'surete': Icons.shield_outlined,
+  'construction': Icons.foundation,
+  'maison': Icons.home_work_outlined,
+  'ecole': Icons.school_outlined,
+  'vehicule': Icons.directions_car_outlined,
+  'voyage': Icons.flight_outlined,
+  'fete': Icons.celebration_outlined,
+};
+
+IconData goalIcon(String? key) => goalIcons[key] ?? Icons.savings_outlined;
+
 IconData walletIcon(WalletType type) => switch (type) {
   WalletType.cash => Icons.payments_outlined,
   WalletType.bank => Icons.account_balance_outlined,
@@ -36,15 +50,29 @@ IconData walletIcon(WalletType type) => switch (type) {
 
 /// Pastille ronde avec l'icône de la catégorie.
 class CategoryBadge extends StatelessWidget {
-  const CategoryBadge({super.key, required this.category, this.size = 40});
+  const CategoryBadge({
+    super.key,
+    required this.category,
+    this.size = 40,
+    this.icon,
+    this.color,
+  });
 
   final Category? category;
   final double size;
 
+  /// Couleur à utiliser à la place de celle de la catégorie.
+  final Color? color;
+
+  /// Icône à afficher à la place de celle de la catégorie.
+  final IconData? icon;
+
   @override
   Widget build(BuildContext context) {
     final mif = context.mif;
-    final color = category == null ? mif.textSecondary : Color(category!.color);
+    final color =
+        this.color ??
+        (category == null ? mif.textSecondary : Color(category!.color));
     final dark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: size,
@@ -54,7 +82,9 @@ class CategoryBadge extends StatelessWidget {
         shape: BoxShape.circle,
       ),
       child: Icon(
-        category == null
+        icon != null
+            ? icon!
+            : category == null
             ? Icons.swap_horiz
             : categoryIcons[category!.icon] ?? Icons.more_horiz,
         size: size * 0.5,
@@ -86,6 +116,9 @@ class MifCard extends StatelessWidget {
 /// « Transfert ».
 String operationTitle(BudgetStore store, Operation op) {
   if (op.type == OperationType.transfer) return 'Transfert';
+  if (op.type.isSavings) {
+    return store.goal(op.savingsGoalId)?.name ?? op.type.label;
+  }
   return store.category(op.categoryId)?.name ?? op.type.label;
 }
 
@@ -122,7 +155,13 @@ class OperationTile extends StatelessWidget {
       final parent = store.category(cat.parentId);
       if (parent != null) parts.add(parent.name);
     }
-    if (isTransfer) {
+    if (op.type.isSavings) {
+      parts.add(
+        op.type == OperationType.savingsDeposit ? 'Mis de côté' : 'Retiré',
+      );
+      final w = store.wallet(op.sourceWalletId ?? op.targetWalletId);
+      if (w != null) parts.add(w.name);
+    } else if (isTransfer) {
       parts.add(
         '${store.wallet(op.sourceWalletId)?.name ?? '?'} → ${store.wallet(op.targetWalletId)?.name ?? '?'}',
       );
@@ -135,12 +174,14 @@ class OperationTile extends StatelessWidget {
     if (showDate) parts.add(dayLabel(op.date, now: store.now()).toLowerCase());
     if (op.note.isNotEmpty) parts.add(op.note);
 
-    final amountText = isTransfer
+    // Transferts et épargne ne sont ni des revenus ni des dépenses.
+    final neutral = isTransfer || op.type.isSavings;
+    final amountText = neutral
         ? formatAmount(op.amount)
         : formatSigned(signedAmount(op));
     final amountColor = op.type == OperationType.income
         ? mif.income
-        : isTransfer
+        : neutral
         ? mif.textSecondary
         : mif.text;
 
@@ -151,7 +192,13 @@ class OperationTile extends StatelessWidget {
         child: Row(
           children: [
             CategoryBadge(
-              category: isTransfer ? null : store.topCategory(op.categoryId),
+              category: isTransfer || op.type.isSavings
+                  ? null
+                  : store.topCategory(op.categoryId),
+              icon: op.type.isSavings
+                  ? goalIcon(store.goal(op.savingsGoalId)?.icon)
+                  : null,
+              color: op.type.isSavings ? mif.green : null,
             ),
             const SizedBox(width: 12),
             Expanded(

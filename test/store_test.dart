@@ -276,4 +276,128 @@ void main() {
     expect(early[1].expense, 12000);
     expect(early[1].spentRatio, 0);
   });
+
+  group('épargnes', () {
+    test(
+      "versements et retraits : l'argent reste dans le portefeuille",
+      () async {
+        final store = await newStore();
+        final surete = await store.addGoal(
+          name: 'Épargne de sûreté',
+          target: 1500000,
+          walletId: bank,
+          startAmount: 300000,
+          icon: 'surete',
+        );
+        Future<Operation> save(OperationType t, int a, {DateTime? date}) =>
+            store.addOperation(
+              type: t,
+              amount: a,
+              date: date ?? clock,
+              savingsGoalId: surete.id,
+              sourceWalletId: t == OperationType.savingsDeposit ? bank : null,
+              targetWalletId: t == OperationType.savingsWithdrawal
+                  ? bank
+                  : null,
+            );
+        await save(OperationType.savingsDeposit, 100000);
+        await save(
+          OperationType.savingsDeposit,
+          50000,
+          date: DateTime(2026, 10, 5),
+        );
+        final retrait = await save(OperationType.savingsWithdrawal, 30000);
+
+        expect(store.goalBalance(surete.id), 420000);
+        expect(store.walletBalance(bank), 400000);
+        expect(store.totalBalance, 470000);
+        expect(store.totalSaved, 420000);
+        expect(store.available, 50000);
+        final m = store.monthSummary(clock);
+        expect(m.saved, 70000);
+        expect(m.expense, 0);
+        expect(m.income, 0);
+
+        await store.deleteOperation(retrait.id);
+        expect(store.goalBalance(surete.id), 450000);
+
+        // Une épargne archivée redevient disponible.
+        await store.updateGoal(store.goal(surete.id)!.copyWith(archived: true));
+        expect(store.goals, isEmpty);
+        expect(store.totalSaved, 0);
+        expect(store.available, 470000);
+      },
+    );
+
+    test('versement mensuel nécessaire pour tenir la date cible', () async {
+      final store = await newStore();
+      final g = await store.addGoal(
+        name: 'Construction',
+        target: 8000000,
+        startAmount: 2400000,
+        targetDate: DateTime(2027, 12, 15),
+      );
+      expect(store.goal(g.id)!.targetDate, DateTime(2027, 12));
+      // Novembre 2026 → décembre 2027 : 14 mois, mois en cours compris.
+      expect(store.monthlyNeeded(g), 400000);
+
+      final sansDate = await store.addGoal(name: 'Voyage', target: 500000);
+      expect(store.monthlyNeeded(sansDate), isNull);
+
+      final passee = await store.addGoal(
+        name: 'Passée',
+        target: 100000,
+        targetDate: DateTime(2026, 3),
+      );
+      expect(store.monthlyNeeded(passee), 100000);
+    });
+
+    test('dépenses mensuelles moyennes des 3 derniers mois complets', () async {
+      final store = await newStore();
+      Future<void> spend(int a, DateTime d) => store.addOperation(
+        type: OperationType.expense,
+        amount: a,
+        date: d,
+        categoryId: 'cat-transport',
+        sourceWalletId: cash,
+      );
+      await spend(300000, DateTime(2026, 10, 3));
+      await spend(500000, DateTime(2026, 9, 3));
+      await spend(999999, clock); // mois en cours : ignoré
+      expect(store.averageMonthlyExpense(), 400000);
+    });
+
+    test('les épargnes sont enregistrées dans le fichier', () async {
+      final dir = await Directory.systemTemp.createTemp('mifbudget');
+      addTearDown(() => dir.delete(recursive: true));
+      final file = File('${dir.path}/mifbudget.json');
+      final store = await newStore(LocalJsonRepository(file));
+      final g = await store.addGoal(
+        name: 'Épargne de construction',
+        target: 8000000,
+        targetDate: DateTime(2028, 12),
+        walletId: bank,
+        startAmount: 2400000,
+        icon: 'construction',
+      );
+      await store.addOperation(
+        type: OperationType.savingsDeposit,
+        amount: 225000,
+        date: clock,
+        savingsGoalId: g.id,
+        sourceWalletId: bank,
+      );
+
+      final reopened = await BudgetStore.open(
+        LocalJsonRepository(file),
+        clock: now,
+      );
+      final loaded = reopened.goals.single;
+      expect(loaded.name, 'Épargne de construction');
+      expect(loaded.targetDate, DateTime(2028, 12));
+      expect(loaded.walletId, bank);
+      expect(loaded.icon, 'construction');
+      expect(reopened.goalBalance(g.id), 2625000);
+    });
+  });
 }

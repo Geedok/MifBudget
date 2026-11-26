@@ -66,6 +66,25 @@ class _ReportScreenState extends State<ReportScreen> {
                   const SizedBox(height: 16),
                   SpentGauge(summary: summary, showRest: false),
                 ],
+                if (summary.saved != 0) ...[
+                  const SizedBox(height: 8),
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: summary.saved > 0
+                              ? 'Mis de côté ce mois-ci : '
+                              : "Retiré de l'épargne ce mois-ci : ",
+                        ),
+                        TextSpan(
+                          text: formatFcfa(summary.saved.abs()),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                    style: TextStyle(fontSize: 13, color: mif.text),
+                  ),
+                ],
               ],
             ),
           ),

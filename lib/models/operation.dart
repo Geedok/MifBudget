@@ -11,6 +11,8 @@ enum OperationType {
   final String code;
   final String label;
 
+  bool get isSavings => this == savingsDeposit || this == savingsWithdrawal;
+
   static OperationType fromCode(String code) =>
       values.firstWhere((t) => t.code == code, orElse: () => expense);
 }
@@ -69,6 +71,7 @@ class Operation {
     String? Function()? categoryId,
     String? Function()? sourceWalletId,
     String? Function()? targetWalletId,
+    String? Function()? savingsGoalId,
     String? note,
     DateTime? updatedAt,
     bool? deleted,
@@ -86,7 +89,7 @@ class Operation {
         ? targetWalletId()
         : this.targetWalletId,
     projectId: projectId,
-    savingsGoalId: savingsGoalId,
+    savingsGoalId: savingsGoalId != null ? savingsGoalId() : this.savingsGoalId,
     note: note ?? this.note,
     visibleToPartner: visibleToPartner,
     authorId: authorId,

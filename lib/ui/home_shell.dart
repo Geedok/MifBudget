@@ -8,6 +8,7 @@ import 'operations_screen.dart';
 import 'placeholder_screen.dart';
 import 'quick_entry_screen.dart';
 import 'report_screen.dart';
+import 'savings_screen.dart';
 
 /// Ouvre la saisie (nouvelle ou modification) puis confirme par un message
 /// avec « Annuler ».
@@ -15,6 +16,7 @@ Future<void> openEntry(
   BuildContext context, {
   Operation? existing,
   OperationType initialType = OperationType.expense,
+  String? initialGoalId,
 }) async {
   final store = StoreScope.read(context);
   final messenger = ScaffoldMessenger.of(context);
@@ -24,6 +26,7 @@ Future<void> openEntry(
     context,
     existing: existing,
     initialType: initialType,
+    initialGoalId: initialGoalId,
   );
   if (result == null) return;
   final op = result.operation;
@@ -36,7 +39,16 @@ Future<void> openEntry(
       onPressed: () => store.restoreOperation(op.id),
     );
   } else if (result.created) {
-    message = '${op.type.label} de ${formatFcfa(op.amount)} enregistrée';
+    message = switch (op.type) {
+      OperationType.expense =>
+        'Dépense de ${formatFcfa(op.amount)} enregistrée',
+      OperationType.income => 'Revenu de ${formatFcfa(op.amount)} enregistré',
+      OperationType.transfer =>
+        'Transfert de ${formatFcfa(op.amount)} enregistré',
+      OperationType.savingsDeposit => '${formatFcfa(op.amount)} mis de côté',
+      OperationType.savingsWithdrawal =>
+        "${formatFcfa(op.amount)} retiré de l'épargne",
+    };
     action = SnackBarAction(
       label: 'Annuler',
       onPressed: () => store.deleteOperation(op.id),
@@ -72,6 +84,7 @@ class _HomeShellState extends State<HomeShell> {
       HomeScreen(
         onSeeAllOperations: () => setState(() => _tab = 1),
         onOpenReport: () => setState(() => _tab = 4),
+        onOpenSavings: () => setState(() => _tab = 3),
       ),
       const OperationsScreen(),
       const PlaceholderScreen(
@@ -79,11 +92,7 @@ class _HomeShellState extends State<HomeShell> {
         icon: Icons.pie_chart_outline,
         message: 'Les plafonds mensuels par catégorie arriveront dans une prochaine étape.',
       ),
-      const PlaceholderScreen(
-        title: 'Épargnes',
-        icon: Icons.savings_outlined,
-        message: "Le suivi de l'épargne de sûreté, de l'épargne de construction et de vos autres objectifs arrive à l'étape 3.",
-      ),
+      const SavingsScreen(),
       const ReportScreen(),
     ];
     return Scaffold(

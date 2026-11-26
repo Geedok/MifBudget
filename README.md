@@ -17,7 +17,15 @@ Application Android de budget familial (Flutter). Voir `CLAUDE.md` pour le cahie
 - Accueil : carte « Revenus du mois » avec le total, l'écart avec le mois précédent, la répartition par source et la part déjà dépensée (ou le dépassement).
 - Onglet Rapports, « Bilan du mois » : revenus, dépenses et reste ; revenus par source comparés au mois précédent ; revenus et dépenses sur 6 mois (toucher un mois pour l'afficher) ; dépenses par catégorie ; détail des revenus.
 
-Étapes suivantes : 3. suivi de l'épargne · 4. statistiques et projections.
+**Étape 3 : suivi de l'épargne** (faite, version 0.3.0)
+- Onglet Épargnes : total mis de côté, puis une carte par épargne (montant / cible, progression, reste à mettre de côté, date cible et versement mensuel nécessaire, mois de dépenses couverts pour l'épargne de sûreté), avec Verser et Retirer.
+- Création et modification d'une épargne : nom, icône, cible, montant déjà mis de côté, date cible facultative, portefeuille ; archivage (l'argent redevient disponible).
+- Détail d'une épargne avec l'historique des versements et retraits.
+- Saisie rapide : onglet « Épargne » (verser / retirer, retrait plafonné au montant épargné).
+- Une épargne reste dans son portefeuille : l'Accueil affiche le **disponible** = portefeuilles − mis de côté, et une carte Épargnes.
+- Bilan du mois : montant mis de côté dans le mois.
+
+Étape suivante : 4. statistiques et projections.
 
 ## Développement
 
