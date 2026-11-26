@@ -1,4 +1,4 @@
-package com.mifbudget.mifbudget
+package com.mifbudget.app
 
 import io.flutter.embedding.android.FlutterActivity
 
