@@ -588,11 +588,11 @@ void main() {
     expect(
       find.text(
         'Dépense de 80${nbsp}000${nbsp}FCFA enregistrée · '
-        'Alimentation : 89${nbsp}% du budget',
+        'Alimentation : 89$nbsp% du budget',
       ),
       findsOneWidget,
     );
-    expect(find.text('89${nbsp}%'), findsOneWidget);
+    expect(find.text('89$nbsp%'), findsOneWidget);
 
     // L'accueil le signale aussi.
     await tester.tap(find.text('Accueil'));
