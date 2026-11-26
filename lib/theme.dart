@@ -16,6 +16,10 @@ class MifColors extends ThemeExtension<MifColors> {
     required this.income,
     required this.chartIncome,
     required this.chartExpense,
+    required this.statusOk,
+    required this.statusWarning,
+    required this.statusWarningText,
+    required this.statusOver,
   });
 
   final Color green;
@@ -40,6 +44,15 @@ class MifColors extends ThemeExtension<MifColors> {
   final Color chartIncome;
   final Color chartExpense;
 
+  /// États des budgets (toujours accompagnés d'un libellé et d'une icône) :
+  /// vert sous 80 %, orange de 80 à 100 %, rouge « Dépassé ».
+  final Color statusOk;
+  final Color statusWarning;
+
+  /// Orange assez foncé pour du texte sur une carte.
+  final Color statusWarningText;
+  final Color statusOver;
+
   static const light = MifColors(
     green: Color(0xFF1F6B4F),
     terracotta: Color(0xFFB4531A),
@@ -53,6 +66,10 @@ class MifColors extends ThemeExtension<MifColors> {
     income: Color(0xFF1F6B4F),
     chartIncome: Color(0xFF14805A),
     chartExpense: Color(0xFFB4531A),
+    statusOk: Color(0xFF1F6B4F),
+    statusWarning: Color(0xFFC26A1E),
+    statusWarningText: Color(0xFF9A4A12),
+    statusOver: Color(0xFFB3261E),
   );
 
   static const dark = MifColors(
@@ -68,6 +85,10 @@ class MifColors extends ThemeExtension<MifColors> {
     income: Color(0xFF5CC197),
     chartIncome: Color(0xFF3FAE82),
     chartExpense: Color(0xFFD9783E),
+    statusOk: Color(0xFF5CC197),
+    statusWarning: Color(0xFFF0A35E),
+    statusWarningText: Color(0xFFF0A35E),
+    statusOver: Color(0xFFF2827A),
   );
 
   @override
@@ -90,6 +111,10 @@ class MifColors extends ThemeExtension<MifColors> {
       income: l(income, other.income),
       chartIncome: l(chartIncome, other.chartIncome),
       chartExpense: l(chartExpense, other.chartExpense),
+      statusOk: l(statusOk, other.statusOk),
+      statusWarning: l(statusWarning, other.statusWarning),
+      statusWarningText: l(statusWarningText, other.statusWarningText),
+      statusOver: l(statusOver, other.statusOver),
     );
   }
 }

@@ -11,15 +11,21 @@ class MonthSwitcher extends StatelessWidget {
     required this.month,
     required this.now,
     required this.onChanged,
+    this.monthsAhead = 0,
   });
 
   final DateTime month;
   final DateTime now;
   final ValueChanged<DateTime> onChanged;
 
+  /// Nombre de mois après le mois en cours qu'on peut afficher (pour
+  /// préparer un budget, par exemple).
+  final int monthsAhead;
+
   @override
   Widget build(BuildContext context) {
-    final isCurrent = month.year == now.year && month.month == now.month;
+    final last = DateTime(now.year, now.month + monthsAhead);
+    final isCurrent = month.year == last.year && month.month == last.month;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [

@@ -543,4 +543,60 @@ void main() {
     expect(store.projectSpent(p.id), 500000);
     expect(store.projectToFund(p), 1300000);
   });
+
+  testWidgets('fixer un budget, puis être prévenu en approchant du plafond', (
+    tester,
+  ) async {
+    final store = await pumpApp(tester);
+    await store.addOperation(
+      type: OperationType.expense,
+      amount: 90000,
+      date: DateTime(2026, 10, 12),
+      categoryId: 'cat-alimentation',
+      sourceWalletId: DefaultIds.walletCash,
+    );
+    await tester.tap(find.text('Budgets'));
+    await tester.pumpAndSettle();
+    expect(find.text('Aucun budget pour novembre'), findsOneWidget);
+    await tester.tap(find.text('Définir les plafonds'));
+    await tester.pumpAndSettle();
+    expect(find.text('Plafonds de novembre'), findsOneWidget);
+    expect(
+      find.text('Proposé : 90${nbsp}000${nbsp}FCFA (moyenne 3 mois)'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Proposer les plafonds'));
+    await tester.pump();
+    expect(find.text('90${nbsp}000'), findsOneWidget);
+    await tester.tap(find.textContaining('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(store.budgetLimit(DateTime(2026, 11), 'cat-alimentation'), 90000);
+    expect(find.text('Dépensé sur le budget du mois'), findsOneWidget);
+    expect(
+      find.text('Reste 90${nbsp}000${nbsp}FCFA · 4 jours avant la fin du mois'),
+      findsOneWidget,
+    );
+
+    // Une dépense qui fait passer à 89 % : prévenu dans la confirmation.
+    await tester.tap(find.byTooltip('Ajouter une opération'));
+    await tester.pumpAndSettle();
+    await type(tester, ['8', '0', '000']);
+    await tester.tap(find.text('Alimentation').last);
+    await tester.pump();
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Dépense de 80${nbsp}000${nbsp}FCFA enregistrée · '
+        'Alimentation : 89${nbsp}% du budget',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('89${nbsp}%'), findsOneWidget);
+
+    // L'accueil le signale aussi.
+    await tester.tap(find.text('Accueil'));
+    await tester.pumpAndSettle();
+    expect(find.text('Budgets à surveiller'), findsOneWidget);
+  });
 }

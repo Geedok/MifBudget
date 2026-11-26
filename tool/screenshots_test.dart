@@ -233,6 +233,13 @@ void main() {
           targetWalletId: compte.id,
         );
       }
+      await store.setBudgets(DateTime(2026, 11), {
+        'cat-logement': 150000,
+        'cat-alimentation': 40000,
+        'cat-transport': 5000,
+        'cat-communication': 6000,
+        'cat-sante': 25000,
+      });
       final fondations = await store.addProject(
         name: 'Fondations',
         budget: 1800000,
@@ -300,6 +307,9 @@ void main() {
       await shot(tester, '7-tendances-$suffix');
       await tester.drag(find.byType(Scrollable).last, const Offset(0, -1700));
       await shot(tester, '7b-tendances-projections-$suffix');
+
+      await tester.tap(find.text('Budgets'));
+      await shot(tester, '10-budgets-$suffix');
 
       await tester.tap(find.text('Épargnes').last);
       await tester.pumpAndSettle();

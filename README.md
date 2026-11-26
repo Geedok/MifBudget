@@ -29,7 +29,12 @@ Application Android de budget familial (Flutter). Voir `CLAUDE.md` pour le cahie
 - Objectifs : date estimée au rythme actuel (sur la carte) et simulateur « Si je verse chaque mois… » dans le détail.
 - Projets (onglet Épargnes et projets) : budget, mois prévu, objectif d'épargne qui le finance, état (prévu, en cours, terminé) ; dépenses rattachées depuis la saisie rapide ; reste à financer et date estimée.
 
-Suite possible : budgets mensuels par catégorie, opérations récurrentes, argent personnel, synchronisation Firebase entre les deux téléphones.
+**Budgets mensuels** (version 0.6.0)
+- Onglet Budgets : plafond par catégorie et par mois (mois suivant préparable), total dépensé sur le budget, reste et jours restants, dépenses hors budget ; une ligne par catégorie avec barre verte (< 80 %), orange (80 à 100 %) ou rouge « Dépassé », toujours avec icône et libellé.
+- Saisie des plafonds : montant proposé sous chaque catégorie (moyenne des 3 mois précédents, arrondie au millier), bouton « Proposer les plafonds », copie des plafonds du mois précédent sans écraser.
+- Après une dépense, la confirmation prévient si la catégorie atteint 80 % ou dépasse son plafond ; l'Accueil affiche « Budgets à surveiller ».
+
+Suite possible : opérations récurrentes, argent personnel, gestion des catégories, synchronisation Firebase entre les deux téléphones.
 
 ## Développement
 

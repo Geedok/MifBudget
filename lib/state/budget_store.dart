@@ -5,6 +5,7 @@ import '../core/format.dart';
 import '../core/projection.dart';
 import '../data/defaults.dart';
 import '../data/repository.dart';
+import '../models/budget.dart';
 import '../models/category.dart';
 import '../models/operation.dart';
 import '../models/project.dart';
@@ -503,6 +504,94 @@ class BudgetStore extends ChangeNotifier {
           previous: before.isEmpty ? 0 : ((p[id] ?? 0) / before.length).round(),
         ),
     ]..sort((a, b) => b.recent.compareTo(a.recent));
+  }
+
+  // ----------------------------------------------------------------- Budgets
+
+  /// Plafond d'une catégorie pour un mois (0 : pas de budget).
+  int budgetLimit(DateTime month, String categoryId) {
+    final id = Budget.idFor(monthKey(month), categoryId);
+    for (final b in _data.budgets) {
+      if (b.id == id) return b.limit;
+    }
+    return 0;
+  }
+
+  /// Budgets du mois (plafond > 0), dans l'ordre des catégories.
+  List<Budget> budgetsFor(DateTime month) {
+    final key = monthKey(month);
+    final order = {
+      for (final (i, c) in topCategories(CategoryKind.expense).indexed) c.id: i,
+    };
+    return _data.budgets.where((b) => b.month == key && b.limit > 0).toList()
+      ..sort(
+        (a, b) =>
+            (order[a.categoryId] ?? 999).compareTo(order[b.categoryId] ?? 999),
+      );
+  }
+
+  /// Dépenses du mois dans une catégorie principale (sous-catégories
+  /// comprises).
+  int spentIn(DateTime month, String categoryId) {
+    var spent = 0;
+    for (final o in operationsInMonth(month)) {
+      if (o.type != OperationType.expense) continue;
+      if (topCategory(o.categoryId)?.id == categoryId) spent += o.amount;
+    }
+    return spent;
+  }
+
+  /// Plafond proposé : moyenne des dépenses de la catégorie sur les 3 mois
+  /// précédant [month] (depuis le premier mois saisi), arrondie au millier
+  /// supérieur ; null sans historique.
+  int? suggestedLimit(DateTime month, String categoryId) {
+    final start = firstActivityMonth;
+    if (start == null) return null;
+    final months = [
+      for (var i = 3; i >= 1; i--) DateTime(month.year, month.month - i),
+    ].where((m) => !m.isBefore(start)).toList();
+    if (months.isEmpty) return null;
+    final avg = average(months.map((m) => spentIn(m, categoryId)));
+    if (avg <= 0) return null;
+    return (avg / 1000).ceil() * 1000;
+  }
+
+  Future<void> setBudgets(DateTime month, Map<String, int> limits) async {
+    final key = monthKey(month);
+    final t = now();
+    final changed = [
+      for (final MapEntry(key: categoryId, value: limit) in limits.entries)
+        if (budgetLimit(month, categoryId) != limit)
+          Budget(
+            categoryId: categoryId,
+            month: key,
+            limit: limit,
+            updatedAt: t,
+          ),
+    ];
+    if (changed.isEmpty) return;
+    for (final b in changed) {
+      final i = _data.budgets.indexWhere((x) => x.id == b.id);
+      if (i >= 0) {
+        _data.budgets[i] = b;
+      } else {
+        _data.budgets.add(b);
+      }
+    }
+    notifyListeners();
+    await _repo.upsertBudgets(changed);
+  }
+
+  /// Copie les plafonds du mois précédent sur [month] (sans écraser ceux
+  /// déjà fixés) ; renvoie le nombre de plafonds copiés.
+  Future<int> copyPreviousBudgets(DateTime month) async {
+    final previous = DateTime(month.year, month.month - 1);
+    final toCopy = {
+      for (final b in budgetsFor(previous))
+        if (budgetLimit(month, b.categoryId) == 0) b.categoryId: b.limit,
+    };
+    await setBudgets(month, toCopy);
+    return toCopy.length;
   }
 
   // ----------------------------------------------------------------- Projets

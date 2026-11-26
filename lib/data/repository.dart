@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../models/budget.dart';
 import '../models/category.dart';
 import '../models/operation.dart';
 import '../models/project.dart';
@@ -18,11 +19,13 @@ class BudgetData {
     List<Operation>? operations,
     List<SavingsGoal>? goals,
     List<Project>? projects,
+    List<Budget>? budgets,
   }) : wallets = wallets ?? [],
        categories = categories ?? [],
        operations = operations ?? [],
        goals = goals ?? [],
-       projects = projects ?? [];
+       projects = projects ?? [],
+       budgets = budgets ?? [];
 
   /// Version du format lue dans le fichier (pour les reprises de données).
   int version;
@@ -32,6 +35,7 @@ class BudgetData {
   final List<Operation> operations;
   final List<SavingsGoal> goals;
   final List<Project> projects;
+  final List<Budget> budgets;
 
   /// 2 : comptes épargne (rôle des portefeuilles), l'épargne devient un
   /// virement vers un compte épargne.
@@ -45,6 +49,7 @@ class BudgetData {
     'operations': operations.map((o) => o.toJson()).toList(),
     'objectifsEpargne': goals.map((g) => g.toJson()).toList(),
     'projets': projects.map((p) => p.toJson()).toList(),
+    'budgets': budgets.map((b) => b.toJson()).toList(),
   };
 
   factory BudgetData.fromJson(Map<String, dynamic> j) {
@@ -60,6 +65,7 @@ class BudgetData {
       operations: list('operations').map(Operation.fromJson).toList(),
       goals: list('objectifsEpargne').map(SavingsGoal.fromJson).toList(),
       projects: list('projets').map(Project.fromJson).toList(),
+      budgets: list('budgets').map(Budget.fromJson).toList(),
     );
   }
 }
@@ -74,6 +80,7 @@ abstract class BudgetRepository {
   Future<void> upsertOperation(Operation operation);
   Future<void> upsertGoal(SavingsGoal goal);
   Future<void> upsertProject(Project project);
+  Future<void> upsertBudgets(List<Budget> budgets);
 }
 
 /// Stockage en mémoire, pour les tests.
@@ -129,6 +136,14 @@ class MemoryRepository implements BudgetRepository {
     _touch();
     _upsert(data.projects, project, (x) => x.id == project.id);
   }
+
+  @override
+  Future<void> upsertBudgets(List<Budget> budgets) async {
+    _touch();
+    for (final b in budgets) {
+      _upsert(data.budgets, b, (x) => x.id == b.id);
+    }
+  }
 }
 
 void _upsert<T>(List<T> list, T item, bool Function(T) same) {
@@ -174,6 +189,9 @@ class LocalJsonRepository extends MemoryRepository {
         data.projects
           ..clear()
           ..addAll(loaded.projects);
+        data.budgets
+          ..clear()
+          ..addAll(loaded.budgets);
       }
     }
     return super.load();
@@ -222,6 +240,12 @@ class LocalJsonRepository extends MemoryRepository {
   @override
   Future<void> upsertProject(Project project) async {
     await super.upsertProject(project);
+    await _write();
+  }
+
+  @override
+  Future<void> upsertBudgets(List<Budget> budgets) async {
+    await super.upsertBudgets(budgets);
     await _write();
   }
 }

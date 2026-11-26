@@ -1,11 +1,12 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../core/format.dart';
+import '../models/budget.dart';
 import '../models/operation.dart';
 import '../state/budget_store.dart';
+import 'budgets_screen.dart';
 import 'home_screen.dart';
 import 'operations_screen.dart';
-import 'placeholder_screen.dart';
 import 'quick_entry_screen.dart';
 import 'report_screen.dart';
 import 'savings_screen.dart';
@@ -32,7 +33,7 @@ Future<void> openEntry(
   );
   if (result == null) return;
   final op = result.operation;
-  final String message;
+  String message;
   SnackBarAction? action;
   if (result.deleted) {
     message = 'Opération supprimée';
@@ -61,6 +62,10 @@ Future<void> openEntry(
   } else {
     message = 'Opération modifiée';
   }
+  if (!result.deleted) {
+    final alert = budgetAlert(store, op);
+    if (alert != null) message = '$message · $alert';
+  }
   messenger
     ..hideCurrentSnackBar()
     ..showSnackBar(
@@ -71,6 +76,24 @@ Future<void> openEntry(
         persist: false,
       ),
     );
+}
+
+/// Après une dépense : « Alimentation : 92 % du budget » ou « budget
+/// Alimentation dépassé » quand la catégorie approche ou dépasse son
+/// plafond du mois ; null sinon.
+String? budgetAlert(BudgetStore store, Operation op) {
+  if (op.type != OperationType.expense || op.deleted) return null;
+  final category = store.topCategory(op.categoryId);
+  if (category == null) return null;
+  final limit = store.budgetLimit(op.date, category.id);
+  if (limit == 0) return null;
+  final spent = store.spentIn(op.date, category.id);
+  return switch (budgetStatus(spent, limit)) {
+    BudgetStatus.over => 'budget ${category.name} dépassé',
+    BudgetStatus.warning =>
+      '${category.name} : ${formatPercent(spent / limit)} du budget',
+    BudgetStatus.ok => null,
+  };
 }
 
 class HomeShell extends StatefulWidget {
@@ -90,13 +113,10 @@ class _HomeShellState extends State<HomeShell> {
         onSeeAllOperations: () => setState(() => _tab = 1),
         onOpenReport: () => setState(() => _tab = 4),
         onOpenSavings: () => setState(() => _tab = 3),
+        onOpenBudgets: () => setState(() => _tab = 2),
       ),
       const OperationsScreen(),
-      const PlaceholderScreen(
-        title: 'Budgets',
-        icon: Icons.pie_chart_outline,
-        message: 'Les plafonds mensuels par catégorie arriveront dans une prochaine étape.',
-      ),
+      const BudgetsScreen(),
       const SavingsScreen(),
       const ReportScreen(),
     ];

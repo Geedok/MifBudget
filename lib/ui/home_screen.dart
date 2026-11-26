@@ -1,10 +1,12 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../core/format.dart';
+import '../models/budget.dart';
 import '../models/wallet.dart';
 import '../state/budget_store.dart';
 import '../theme.dart';
 import 'home_shell.dart';
+import 'budgets_screen.dart';
 import 'settings_screen.dart';
 import 'wallet_form_screen.dart';
 import 'widgets/charts.dart';
@@ -17,11 +19,13 @@ class HomeScreen extends StatelessWidget {
     required this.onSeeAllOperations,
     required this.onOpenReport,
     required this.onOpenSavings,
+    required this.onOpenBudgets,
   });
 
   final VoidCallback onSeeAllOperations;
   final VoidCallback onOpenReport;
   final VoidCallback onOpenSavings;
+  final VoidCallback onOpenBudgets;
 
   @override
   Widget build(BuildContext context) {
@@ -133,6 +137,7 @@ class HomeScreen extends StatelessWidget {
           const SizedBox(height: 12),
           IncomeCard(onOpenReport: onOpenReport),
           const SizedBox(height: 12),
+          _BudgetAlerts(onOpenBudgets: onOpenBudgets),
           _SavingsCard(onOpenSavings: onOpenSavings),
           const SizedBox(height: 12),
           MifCard(
@@ -396,6 +401,90 @@ class _WalletTile extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Accueil : budgets du mois à 80 % ou plus (rien s'il n'y en a pas).
+class _BudgetAlerts extends StatelessWidget {
+  const _BudgetAlerts({required this.onOpenBudgets});
+
+  final VoidCallback onOpenBudgets;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final mif = context.mif;
+    final month = store.now();
+    final alerts =
+        [
+          for (final b in store.budgetsFor(month))
+            if (budgetStatus(store.spentIn(month, b.categoryId), b.limit) !=
+                BudgetStatus.ok)
+              b,
+        ]..sort(
+          (a, b) => (store.spentIn(month, b.categoryId) / b.limit).compareTo(
+            store.spentIn(month, a.categoryId) / a.limit,
+          ),
+        );
+    if (alerts.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: MifCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SectionTitle(
+              'Budgets à surveiller',
+              trailing: TextButton(
+                onPressed: onOpenBudgets,
+                child: const Text('Voir tout'),
+              ),
+            ),
+            for (final b in alerts.take(3)) ...[
+              const SizedBox(height: 8),
+              Builder(
+                builder: (context) {
+                  final spent = store.spentIn(month, b.categoryId);
+                  final style = statusStyle(context, spent, b.limit);
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              store.category(b.categoryId)?.name ?? '',
+                              style: TextStyle(fontSize: 14, color: mif.text),
+                            ),
+                          ),
+                          Icon(style.icon, size: 16, color: style.text),
+                          const SizedBox(width: 4),
+                          Text(
+                            style.label,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: style.text,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ValueBar(
+                        fraction: spent / b.limit,
+                        color: style.bar,
+                        height: 6,
+                        track: true,
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ],
         ),
       ),
     );
