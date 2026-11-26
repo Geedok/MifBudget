@@ -14,6 +14,16 @@ Références (à jour au 26/11/2026) :
 - Identifiants générés sur le téléphone (UUID). Soldes jamais stockés : recalculés à partir des opérations. Suppression douce (champ supprimée), annulable 30 jours.
 - Conflits : dernière modification gagne, historique conservé ; une suppression l'emporte sur une modification.
 
+## Priorités du foyer (26/11/2026)
+
+Ce qui compte le plus pour Eudokia, à garder en tête dans chaque choix :
+1. Saisir une dépense facilement et vite (saisie rapide en quelques touches, catégories récentes, montant en premier).
+2. Avoir une idée claire des revenus (ce qui est entré ce mois-ci, d'où, comparé aux dépenses).
+3. Suivre l'épargne (progression vers chaque cible).
+4. Avoir des statistiques pour se projeter et planifier les projets (tendances sur plusieurs mois, capacité d'épargne mensuelle, date estimée pour atteindre une cible ou financer un projet).
+
+Les statistiques et les projets sont donc plus importants que l'ordre ci-dessous ne le laisse penser : ils viennent juste après le socle (opérations, catégories, épargnes).
+
 ## Fonctionnalités V1 (ordre de priorité)
 
 Indispensable : opérations (revenu, dépense, transfert, versement/retrait d'épargne), catégories et sous-catégories, budgets mensuels, épargnes.
