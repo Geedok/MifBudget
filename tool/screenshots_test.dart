@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:mifbudget/app.dart';
+import 'package:mifbudget/core/pin.dart';
 import 'package:mifbudget/data/defaults.dart';
 import 'package:mifbudget/data/repository.dart';
 import 'package:mifbudget/models/operation.dart';
@@ -424,6 +425,36 @@ void main() {
       await shot(tester, '11-categories-$suffix');
       await tester.tap(find.text('Alimentation'));
       await shot(tester, '12-categorie-$suffix');
+    });
+  }
+
+  for (final dark in [false, true]) {
+    testWidgets('verrouillage ${dark ? 'nuit' : 'jour'}', (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final store = await BudgetStore.open(MemoryRepository());
+      await store.completeSetup(
+        memberName: 'Eudokia',
+        cash: 0,
+        bank: 0,
+        mobileMoney: 0,
+      );
+      await store.setTheme(dark ? ThemeChoice.dark : ThemeChoice.light);
+      final salt = newPinSalt();
+      await store.updateSettings(
+        store.settings.copyWith(
+          pinSalt: () => salt,
+          pinHash: () => hashPin('1234', salt),
+        ),
+      );
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: const Key('shot'),
+          child: MifBudgetApp(store: store),
+        ),
+      );
+      await shot(tester, '15-verrouillage-${dark ? 'nuit' : 'jour'}');
     });
   }
 }

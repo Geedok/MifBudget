@@ -9,6 +9,7 @@ import '../theme.dart';
 import 'sync_screen.dart';
 import 'widgets/amount_field.dart';
 import 'widgets/common.dart';
+import 'widgets/logo.dart';
 
 /// Première ouverture : prénom et soldes de départ des portefeuilles.
 class SetupScreen extends StatefulWidget {
@@ -75,15 +76,21 @@ class _SetupScreenState extends State<SetupScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
           children: [
-            Text(
-              'MifBudget',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: mif.green,
-              ),
+            Row(
+              children: [
+                const MifLogo(size: 44),
+                const SizedBox(width: 12),
+                Text(
+                  'MifBudget',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: mif.green,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 20),
             Text(
               'Bienvenue',
               style: TextStyle(

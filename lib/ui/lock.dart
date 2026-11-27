@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../core/pin.dart';
 import '../state/budget_store.dart';
 import '../theme.dart';
+import 'widgets/logo.dart';
 
 /// Délai hors de l'application au-delà duquel le code est redemandé.
 const lockAfter = Duration(minutes: 5);
@@ -161,8 +162,8 @@ class _LockScreenState extends State<LockScreen> {
         child: Column(
           children: [
             const Spacer(),
-            Icon(Icons.lock_outline, size: 40, color: mif.green),
-            const SizedBox(height: 12),
+            const MifLogo(size: 72),
+            const SizedBox(height: 14),
             Text(
               'MifBudget',
               style: TextStyle(

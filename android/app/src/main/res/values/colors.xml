@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fond de l'écran de chargement (vert profond du logo). -->
+    <color name="splash_background">#0F3326</color>
+</resources>

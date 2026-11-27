@@ -61,6 +61,12 @@ Application Android de budget familial (Flutter). Voir `CLAUDE.md` pour le cahie
 - Confidentialité côté serveur : portefeuilles privés et dépenses perso privées dans `foyers/{id}/prive/{membre}`, lisibles par leur seul propriétaire (`firestore.rules`).
 - Verrouillage : code à 4 chiffres (et empreinte en option), demandé à l'ouverture et après 5 minutes hors de l'application.
 
+**Logo et écran de chargement** (version 1.0.1)
+- Logo « le duo » : un « m » fait de deux arches, verte et orange, qui se chevauchent, sur un vert profond.
+- Icône adaptative (rond, carré arrondi… selon le téléphone) avec version d'une seule couleur pour les icônes thématiques d'Android 13+.
+- Écran de chargement vert profond avec le logo et « MifBudget · Le budget du foyer » (écran de démarrage du système sur Android 12+).
+- Logo dans l'application : écran du code de verrouillage et première ouverture.
+
 ### Firebase
 
 - Projet `mifbudget`, configuration Android dans `android/app/google-services.json` (empreintes SHA-1 et SHA-256 de la clé de signature déclarées dans la console).
@@ -91,6 +97,14 @@ Sans eux, `flutter build apk --release` s'arrête avec un message. Empreinte SHA
 `1B:6F:2E:D6:DE:99:97:50:2D:A3:E8:F8:4D:D6:E7:37:0F:C1:64:5F:16:06:CB:8D:06:F1:5D:3E:CF:84:75:62`
 
 Identifiant de l'application : `com.mifbudget.app` (ne plus le changer). Augmenter le numéro après le `+` de `version` dans `pubspec.yaml` à chaque nouvelle version distribuée.
+
+Logo : sources SVG dans `tool/logo/` (`icon.svg`, calques `background.svg`, `foreground.svg`, `monochrome.svg`). Après modification, régénérer les images Android (icônes et écran de chargement) :
+
+```bash
+NODE_PATH=$(npm root -g) node tool/logo/render.js
+```
+
+Le même logo est dessiné dans l'application par `lib/ui/widgets/logo.dart` (à garder identique).
 
 Captures d'écran de contrôle (jour et nuit) :
 
