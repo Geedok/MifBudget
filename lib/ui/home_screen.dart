@@ -7,6 +7,7 @@ import '../state/budget_store.dart';
 import '../theme.dart';
 import 'home_shell.dart';
 import 'budgets_screen.dart';
+import 'personal_money.dart';
 import 'recurrences_screen.dart';
 import 'settings_screen.dart';
 import 'wallet_form_screen.dart';
@@ -139,6 +140,7 @@ class HomeScreen extends StatelessWidget {
           IncomeCard(onOpenReport: onOpenReport),
           const SizedBox(height: 12),
           const RecurringCard(),
+          const PersonalMoneyCard(),
           _BudgetAlerts(onOpenBudgets: onOpenBudgets),
           _SavingsCard(onOpenSavings: onOpenSavings),
           const SizedBox(height: 12),
@@ -321,7 +323,7 @@ class _WalletTiles extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
-    final wallets = store.currentWallets;
+    final wallets = store.householdCurrentWallets;
     Widget tile(Wallet w) => _WalletTile(wallet: w);
     if (wallets.length <= 3) {
       return Row(

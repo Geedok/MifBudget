@@ -33,6 +33,7 @@ class Operation {
     this.savingsGoalId,
     this.note = '',
     this.visibleToPartner = true,
+    this.personal = false,
     required this.authorId,
     required this.createdAt,
     required this.updatedAt,
@@ -60,6 +61,10 @@ class Operation {
   final String? savingsGoalId;
   final String note;
   final bool visibleToPartner;
+
+  /// Dépense faite avec l'argent personnel de son auteur : elle ne compte
+  /// pas dans les dépenses du foyer (le versement mensuel y est déjà).
+  final bool personal;
   final String authorId;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -79,6 +84,8 @@ class Operation {
     String? Function()? projectId,
     String? Function()? recurrenceId,
     String? note,
+    bool? visibleToPartner,
+    bool? personal,
     DateTime? updatedAt,
     bool? deleted,
     DateTime? Function()? deletedAt,
@@ -98,7 +105,8 @@ class Operation {
     recurrenceId: recurrenceId != null ? recurrenceId() : this.recurrenceId,
     savingsGoalId: savingsGoalId != null ? savingsGoalId() : this.savingsGoalId,
     note: note ?? this.note,
-    visibleToPartner: visibleToPartner,
+    visibleToPartner: visibleToPartner ?? this.visibleToPartner,
+    personal: personal ?? this.personal,
     authorId: authorId,
     createdAt: createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -119,6 +127,7 @@ class Operation {
     'objectifEpargne': savingsGoalId,
     'note': note,
     'visibleParAutre': visibleToPartner,
+    'personnelle': personal,
     'auteur': authorId,
     'creeLe': createdAt.toIso8601String(),
     'modifieLe': updatedAt.toIso8601String(),
@@ -139,6 +148,7 @@ class Operation {
     savingsGoalId: j['objectifEpargne'] as String?,
     note: j['note'] as String? ?? '',
     visibleToPartner: j['visibleParAutre'] as bool? ?? true,
+    personal: j['personnelle'] as bool? ?? false,
     authorId: j['auteur'] as String,
     createdAt: DateTime.parse(j['creeLe'] as String),
     updatedAt: DateTime.parse(j['modifieLe'] as String),

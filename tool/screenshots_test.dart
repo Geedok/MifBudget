@@ -261,6 +261,48 @@ void main() {
         startMonth: DateTime(2026, 11),
         note: 'Canal+',
       );
+      // Argent personnel : porte-monnaie, versement du 1er, dépenses perso.
+      final purse = await store.addWallet(
+        name: 'Porte-monnaie',
+        type: WalletType.cash,
+        shared: false,
+        private: true,
+      );
+      await store.setupPersonalMoney(
+        amount: 30000,
+        dayOfMonth: 1,
+        fromWalletId: DefaultIds.walletBank,
+        toWalletId: purse.id,
+      );
+      for (final m in [9, 10, 11]) {
+        await store.addOperation(
+          type: OperationType.expense,
+          amount: 30000,
+          date: DateTime(2026, m, 1),
+          categoryId: 'cat-argent-personnel',
+          sourceWalletId: DefaultIds.walletBank,
+          targetWalletId: purse.id,
+          note: 'Argent personnel',
+        );
+      }
+      for (final (a, cat, note, visible, days) in [
+        (8000, 'cat-loisirs-sorties', 'Sortie entre amis', false, 6),
+        (6500, 'cat-transport-taxi-et-moto', 'Taxi-moto', false, 3),
+        (4000, 'cat-famille', 'Cadeau anniversaire', true, 1),
+        (21000, 'cat-loisirs', '', false, 40),
+        (17500, 'cat-habillement', '', false, 70),
+      ]) {
+        await store.addOperation(
+          type: OperationType.expense,
+          amount: a,
+          date: clock.subtract(Duration(days: days)),
+          categoryId: cat,
+          sourceWalletId: purse.id,
+          note: note,
+          personal: true,
+          visibleToPartner: visible,
+        );
+      }
       await store.setBudgets(DateTime(2026, 11), {
         'cat-logement': 150000,
         'cat-alimentation': 40000,
@@ -352,6 +394,25 @@ void main() {
       await tester.tap(find.byTooltip('Retour'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Accueil'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Réglages'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Retour'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Mon argent personnel'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.ensureVisible(find.text('Mon argent personnel'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mon argent personnel'));
+      await shot(tester, '14-argent-personnel-$suffix');
+      await tester.drag(find.byType(Scrollable).last, const Offset(0, -600));
+      await shot(tester, '14b-argent-personnel-$suffix');
+      await tester.tap(find.byTooltip('Retour'));
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, 5000));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Réglages'));
       await tester.pumpAndSettle();

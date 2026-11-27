@@ -5,6 +5,7 @@ import '../models/settings.dart';
 import '../state/budget_store.dart';
 import '../theme.dart';
 import 'categories_screen.dart';
+import 'personal_money.dart';
 import 'recurrences_screen.dart';
 import 'wallet_form_screen.dart';
 import 'widgets/common.dart';
@@ -29,6 +30,27 @@ class SettingsScreen extends StatelessWidget {
               title: const Text('Prénom'),
               subtitle: Text(store.settings.memberName),
               onTap: () => _editName(context, store),
+            ),
+          ),
+          const _Header('Argent personnel'),
+          MifCard(
+            padding: EdgeInsets.zero,
+            child: ListTile(
+              leading: const Icon(Icons.lock_outline),
+              title: Text(
+                store.settings.personalMoney
+                    ? 'Argent personnel activé'
+                    : "Activer l'argent personnel",
+              ),
+              subtitle: Text(
+                store.allowance == null
+                    ? 'Un montant mensuel pour chacun, dépenses privées'
+                    : '${formatFcfa(store.allowance!.amount)} le '
+                          '${store.allowance!.dayOfMonth == 1 ? '1er' : store.allowance!.dayOfMonth} '
+                          'de chaque mois',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => PersonalMoneySetupScreen.open(context),
             ),
           ),
           const _Header('Opérations récurrentes'),

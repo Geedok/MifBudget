@@ -221,6 +221,22 @@ class BudgetStore extends ChangeNotifier {
   List<Wallet> get currentWallets =>
       wallets.where((w) => !w.isSavings).toList();
 
+  /// Portefeuilles courants communs au foyer (ceux du disponible).
+  List<Wallet> get householdCurrentWallets =>
+      currentWallets.where((w) => w.shared).toList();
+
+  /// Mes portefeuilles personnels (porte-monnaie, Mobile Money perso…).
+  List<Wallet> get personalWallets => wallets
+      .where(
+        (w) =>
+            !w.shared &&
+            !w.isSavings &&
+            (w.ownerId == null || w.ownerId == settings.memberId),
+      )
+      .toList();
+
+  bool isPersonalWallet(String? id) => personalWallets.any((w) => w.id == id);
+
   List<Wallet> get savingsWallets => wallets.where((w) => w.isSavings).toList();
 
   /// Tous les portefeuilles, archivés compris.
@@ -354,7 +370,7 @@ class BudgetStore extends ChangeNotifier {
     bool savingsWallet(String? id) => wallet(id)?.isSavings ?? false;
     for (final o in operationsInMonth(month)) {
       if (o.type == OperationType.income) income += o.amount;
-      if (o.type == OperationType.expense) expense += o.amount;
+      if (o.type == OperationType.expense && !o.personal) expense += o.amount;
       if (o.type.isSavings) continue;
       // Épargne du mois : ce que les comptes épargne ont reçu moins ce qui
       // en est sorti (hors virements d'un compte épargne à un autre).
@@ -425,9 +441,10 @@ class BudgetStore extends ChangeNotifier {
   int get totalSaved =>
       savingsWallets.fold(0, (sum, w) => sum + walletBalance(w.id));
 
-  /// Argent disponible : total des portefeuilles courants.
+  /// Argent disponible du foyer : portefeuilles courants communs (l'argent
+  /// personnel n'en fait pas partie).
   int get available =>
-      currentWallets.fold(0, (sum, w) => sum + walletBalance(w.id));
+      householdCurrentWallets.fold(0, (sum, w) => sum + walletBalance(w.id));
 
   /// Versement mensuel nécessaire pour atteindre la cible à la date cible
   /// (mois en cours compris) ; null sans date cible ou si c'est atteint.
@@ -791,6 +808,123 @@ class BudgetStore extends ChangeNotifier {
           )
           .fold(0, (sum, o) => sum + o.recurrence.amount);
 
+  // ------------------------------------------------------ Argent personnel
+
+  /// Ce qui reste d'argent personnel : total de mes portefeuilles personnels.
+  int get personalBalance =>
+      personalWallets.fold(0, (sum, w) => sum + walletBalance(w.id));
+
+  /// Argent arrivé sur mes portefeuilles personnels depuis ailleurs pendant
+  /// le mois (versement mensuel, dépôt…).
+  int personalReceived(DateTime month) {
+    var total = 0;
+    for (final o in operationsInMonth(month)) {
+      if (isPersonalWallet(o.targetWalletId) &&
+          !isPersonalWallet(o.sourceWalletId)) {
+        total += o.amount;
+      }
+    }
+    return total;
+  }
+
+  /// Mes dépenses personnelles du mois.
+  List<Operation> personalExpenses(DateTime month) =>
+      operationsInMonth(month)
+          .where((o) => o.type == OperationType.expense && o.personal)
+          .toList();
+
+  int personalSpent(DateTime month) =>
+      personalExpenses(month).fold(0, (sum, o) => sum + o.amount);
+
+  /// Dépenses personnelles du mois par catégorie principale.
+  List<CategoryTotal> personalByCategory(DateTime month) {
+    final totals = <String?, (int, int)>{};
+    for (final o in personalExpenses(month)) {
+      final id = topCategory(o.categoryId)?.id;
+      final prev = totals[id] ?? (0, 0);
+      totals[id] = (prev.$1 + o.amount, prev.$2 + 1);
+    }
+    return [
+      for (final MapEntry(key: id, value: (amount, count)) in totals.entries)
+        CategoryTotal(category: category(id), amount: amount, count: count),
+    ]..sort((a, b) => b.amount.compareTo(a.amount));
+  }
+
+  /// Reçu (revenus) et dépensé (dépenses) en argent personnel, mois par mois.
+  List<MonthSummary> personalMonths(DateTime month, {int count = 6}) => [
+    for (var i = count - 1; i >= 0; i--)
+      () {
+        final m = DateTime(month.year, month.month - i);
+        return MonthSummary(
+          income: personalReceived(m),
+          expense: personalSpent(m),
+          month: m,
+        );
+      }(),
+  ];
+
+  /// Récurrence du versement mensuel (si l'argent personnel est activé).
+  Recurrence? get allowance => recurrence(settings.allowanceRecurrenceId);
+
+  /// Active (ou modifie) l'argent personnel : versement mensuel « à
+  /// confirmer » d'un portefeuille commun vers un portefeuille personnel,
+  /// compté comme dépense du foyer dans la catégorie Argent personnel.
+  Future<void> setupPersonalMoney({
+    required int amount,
+    required int dayOfMonth,
+    required String fromWalletId,
+    required String toWalletId,
+  }) async {
+    final existing = allowance;
+    final categoryId = category('cat-argent-personnel')?.id;
+    if (existing != null && !existing.stopped) {
+      await updateRecurrence(
+        existing.copyWith(
+          amount: amount,
+          dayOfMonth: dayOfMonth,
+          sourceWalletId: () => fromWalletId,
+          targetWalletId: () => toWalletId,
+        ),
+      );
+    } else {
+      final t = dateOnly(now());
+      final r = await addRecurrence(
+        type: OperationType.expense,
+        amount: amount,
+        categoryId: categoryId,
+        sourceWalletId: fromWalletId,
+        targetWalletId: toWalletId,
+        note: 'Argent personnel',
+        dayOfMonth: dayOfMonth,
+        // Le jour est passé ce mois-ci : on commence le mois prochain.
+        startMonth: dayOfMonth >= t.day
+            ? DateTime(t.year, t.month)
+            : DateTime(t.year, t.month + 1),
+      );
+      _data.settings = _data.settings.copyWith(
+        allowanceRecurrenceId: () => r.id,
+      );
+    }
+    _data.settings = _data.settings.copyWith(personalMoney: true);
+    notifyListeners();
+    await _repo.saveSettings(_data.settings);
+  }
+
+  /// Désactive l'argent personnel : le versement mensuel s'arrête ; les
+  /// portefeuilles et l'historique restent.
+  Future<void> disablePersonalMoney() async {
+    final r = allowance;
+    if (r != null && !r.stopped) {
+      await updateRecurrence(r.copyWith(stopped: true));
+    }
+    _data.settings = _data.settings.copyWith(
+      personalMoney: false,
+      allowanceRecurrenceId: () => null,
+    );
+    notifyListeners();
+    await _repo.saveSettings(_data.settings);
+  }
+
   // ----------------------------------------------------------------- Budgets
 
   /// Plafond d'une catégorie pour un mois (0 : pas de budget).
@@ -820,7 +954,7 @@ class BudgetStore extends ChangeNotifier {
   int spentIn(DateTime month, String categoryId) {
     var spent = 0;
     for (final o in operationsInMonth(month)) {
-      if (o.type != OperationType.expense) continue;
+      if (o.type != OperationType.expense || o.personal) continue;
       if (topCategory(o.categoryId)?.id == categoryId) spent += o.amount;
     }
     return spent;
@@ -1046,7 +1180,7 @@ class BudgetStore extends ChangeNotifier {
         : OperationType.expense;
     final tops = <String?, Map<String?, (int, int)>>{};
     for (final o in operationsInMonth(month)) {
-      if (o.type != type) continue;
+      if (o.type != type || o.personal) continue;
       final cat = category(o.categoryId);
       final top = topCategory(o.categoryId);
       final subs = tops.putIfAbsent(top?.id, () => {});
@@ -1168,6 +1302,8 @@ class BudgetStore extends ChangeNotifier {
     String? id,
     String note = '',
     bool deleted = false,
+    bool personal = false,
+    bool visibleToPartner = true,
   }) async {
     final t = now();
     final op = Operation(
@@ -1183,6 +1319,8 @@ class BudgetStore extends ChangeNotifier {
       recurrenceId: recurrenceId,
       deleted: deleted,
       deletedAt: deleted ? t : null,
+      personal: personal,
+      visibleToPartner: visibleToPartner,
       note: note.trim(),
       authorId: settings.memberId,
       createdAt: t,

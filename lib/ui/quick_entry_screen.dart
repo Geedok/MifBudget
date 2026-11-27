@@ -24,6 +24,9 @@ class EntryResult {
   final bool deleted;
 }
 
+/// Pour qui est une dépense payée avec un portefeuille personnel.
+enum _SpentFor { mePrivate, meVisible, household }
+
 /// Usage de l'écran de saisie.
 enum EntryMode {
   /// Nouvelle opération, ou modification de [QuickEntryScreen.existing].
@@ -99,6 +102,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
   String? _walletId; // dépense : débité ; revenu : crédité ; épargne : lieu
   String? _goalId; // épargne
   String? _projectId; // dépense rattachée à un projet
+  _SpentFor _for = _SpentFor.mePrivate; // dépense avec un portefeuille perso
   String? _fromId; // transfert
   String? _toId; // transfert
   late DateTime _date;
@@ -124,6 +128,14 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       _note.text = e.note;
       _goalId = e.savingsGoalId;
       _projectId = e.projectId;
+      _for = !e.personal
+          ? (e.type == OperationType.expense &&
+                    store.isPersonalWallet(e.sourceWalletId)
+                ? _SpentFor.household
+                : _SpentFor.mePrivate)
+          : e.visibleToPartner
+          ? _SpentFor.meVisible
+          : _SpentFor.mePrivate;
       if (e.type == OperationType.transfer) {
         _fromId = e.sourceWalletId;
         _toId = e.targetWalletId;
@@ -268,10 +280,22 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     final isTransfer = type == OperationType.transfer;
     final incoming = type == OperationType.income;
     final source = isTransfer ? _fromId : (incoming ? null : _walletId);
-    final target = isTransfer ? _toId : (incoming ? _walletId : null);
+    // Une dépense qui alimente un portefeuille (le versement d'argent
+    // personnel) garde sa destination.
+    final keptTarget = type == OperationType.expense
+        ? widget.existing?.targetWalletId
+        : null;
+    final target = isTransfer ? _toId : (incoming ? _walletId : keptTarget);
     final category = isTransfer ? null : _categoryId;
     final goalId = _type.isSavings ? _goalId : null;
     final projectId = type == OperationType.expense ? _projectId : null;
+    // Dépense avec mon argent personnel : hors dépenses du foyer, privée
+    // sauf si je la rends visible.
+    final personal =
+        type == OperationType.expense &&
+        store.isPersonalWallet(source) &&
+        _for != _SpentFor.household;
+    final visible = !personal || _for == _SpentFor.meVisible;
     final EntryResult result;
     if (widget.mode == EntryMode.draft) {
       final t = store.now();
@@ -296,6 +320,8 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         savingsGoalId: () => goalId,
         projectId: () => projectId,
         note: _note.text.trim(),
+        personal: personal,
+        visibleToPartner: visible,
       );
       if (mounted) Navigator.of(context).pop(EntryResult(draft));
       return;
@@ -313,6 +339,8 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         savingsGoalId: goalId,
         projectId: projectId,
         note: _note.text,
+        personal: personal,
+        visibleToPartner: visible,
       );
       result = EntryResult(op, created: true);
     } else if (_editing) {
@@ -326,6 +354,8 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         savingsGoalId: () => goalId,
         projectId: () => projectId,
         note: _note.text.trim(),
+        personal: personal,
+        visibleToPartner: visible,
       );
       await store.updateOperation(updated);
       result = EntryResult(updated);
@@ -340,6 +370,8 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         savingsGoalId: goalId,
         projectId: projectId,
         note: _note.text,
+        personal: personal,
+        visibleToPartner: visible,
       );
       result = EntryResult(op, created: true);
     }
@@ -469,6 +501,56 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
                       selectedId: _walletId,
                       onSelected: (id) => setState(() => _walletId = id),
                     ),
+                    if (_type == OperationType.expense &&
+                        store.isPersonalWallet(_walletId)) ...[
+                      const SizedBox(height: 12),
+                      _Label('Pour'),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          for (final (value, label, icon) in [
+                            (
+                              _SpentFor.mePrivate,
+                              'Moi · privé',
+                              Icons.lock_outline,
+                            ),
+                            (
+                              _SpentFor.meVisible,
+                              'Moi · visible',
+                              Icons.visibility_outlined,
+                            ),
+                            (
+                              _SpentFor.household,
+                              'Le foyer',
+                              Icons.home_outlined,
+                            ),
+                          ])
+                            _Chip(
+                              label: label,
+                              icon: icon,
+                              selected: _for == value,
+                              onTap: () => setState(() => _for = value),
+                            ),
+                        ],
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          switch (_for) {
+                            _SpentFor.mePrivate => 'Payée avec votre argent personnel, visible par vous seul.',
+                            _SpentFor.meVisible => 'Payée avec votre argent personnel, visible du foyer.',
+                            _SpentFor.household =>
+                              'Une dépense du foyer payée depuis ce portefeuille : '
+                                  'elle compte dans le budget familial.',
+                          },
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: mif.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
                     if (_type == OperationType.expense &&
                         store.openProjects.isNotEmpty) ...[
                       const SizedBox(height: 12),

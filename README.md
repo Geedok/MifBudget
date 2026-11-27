@@ -47,7 +47,14 @@ Application Android de budget familial (Flutter). Voir `CLAUDE.md` pour le cahie
 - Accueil : « À confirmer » et « À venir » (30 jours) ; carte Revenus : revenus attendus du mois ; Budgets : dépenses récurrentes encore prévues.
 - Pas de notifications (choix du foyer).
 
-Suite possible : argent personnel, synchronisation Firebase entre les deux téléphones.
+**Argent personnel** (version 0.9.0)
+- Réglages → Argent personnel : montant mensuel, jour, portefeuille commun d'où part le versement, portefeuille personnel qui le reçoit (« Créer Porte-monnaie » en un toucher). Versement « à confirmer » chaque mois, montant modifiable ; compté comme dépense du foyer (catégorie Argent personnel).
+- Argent personnel réparti sur un ou plusieurs portefeuilles personnels (porte-monnaie, Mobile Money perso) ; le disponible du foyer ne compte que les portefeuilles communs.
+- Saisie avec un portefeuille personnel : « Pour : moi (privé) · moi (visible) · le foyer ». Les dépenses perso ne comptent pas dans les chiffres du foyer (le versement y est déjà).
+- « Mon argent personnel » (Accueil), visible par soi seul : reste, reçu et dépensé du mois, détail par portefeuille, par catégorie, mois par mois, dépenses privées ou visibles.
+- Plus tard : interrupteur « Avance sur mon argent personnel » (voir CLAUDE.md).
+
+Suite possible : synchronisation Firebase entre les deux téléphones.
 
 ## Développement
 

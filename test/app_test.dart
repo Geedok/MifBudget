@@ -769,4 +769,85 @@ void main() {
       expect(store.walletBalance(DefaultIds.walletCash), 20000);
     },
   );
+
+  testWidgets("activer l'argent personnel et faire une dépense privée", (
+    tester,
+  ) async {
+    final store = await pumpApp(tester);
+    await tester.tap(find.byTooltip('Réglages'));
+    await tester.pumpAndSettle();
+    await reveal(tester, "Activer l'argent personnel");
+    await tester.tap(find.text("Activer l'argent personnel").last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Montant mensuel'),
+      '30000',
+    );
+    await reveal(tester, 'Créer « Porte-monnaie » (espèces, privé)');
+    await tester.tap(find.text('Créer « Porte-monnaie » (espèces, privé)'));
+    await tester.pumpAndSettle();
+    await reveal(tester, "Activer l'argent personnel");
+    await tester.tap(find.text("Activer l'argent personnel").last);
+    await tester.pumpAndSettle();
+    final purse = store.personalWallets.single;
+    expect(purse.isPrivate, isTrue);
+    expect(store.allowance!.targetWalletId, purse.id);
+    expect(store.allowance!.sourceWalletId, DefaultIds.walletCash);
+    expect(
+      find.text('30${nbsp}000${nbsp}FCFA le 1er de chaque mois'),
+      findsOneWidget,
+    );
+    await tester.tap(find.byTooltip('Retour'));
+    await tester.pumpAndSettle();
+
+    // Le porte-monnaie reçoit 5 000 puis sert à une dépense perso.
+    await store.addOperation(
+      type: OperationType.transfer,
+      amount: 5000,
+      date: DateTime(2026, 11, 26),
+      sourceWalletId: DefaultIds.walletCash,
+      targetWalletId: purse.id,
+    );
+    await tester.tap(find.byTooltip('Ajouter une opération'));
+    await tester.pumpAndSettle();
+    await type(tester, ['2', '000']);
+    await tester.tap(find.text('Transport'));
+    await tester.tap(find.text('Porte-monnaie'));
+    await tester.pump();
+    await tester.scrollUntilVisible(
+      find.text('Payée avec votre argent personnel, visible par vous seul.'),
+      100,
+      scrollable: find
+          .descendant(
+            of: find.byType(QuickEntryScreen),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    expect(
+      find.text('Payée avec votre argent personnel, visible par vous seul.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    final op = store.operations.firstWhere(
+      (o) => o.type == OperationType.expense,
+    );
+    expect(op.personal, isTrue);
+    expect(op.visibleToPartner, isFalse);
+    expect(store.monthSummary(DateTime(2026, 11)).expense, 0);
+    expect(store.personalBalance, 3000);
+
+    // L'accueil montre l'argent personnel ; l'écran dédié, la dépense.
+    expect(find.text('Mon argent personnel'), findsOneWidget);
+    await tester.ensureVisible(find.text('Mon argent personnel'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mon argent personnel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Visible par vous seul'), findsOneWidget);
+    expect(
+      find.textContaining('2${nbsp}000${nbsp}FCFA dépensés en novembre'),
+      findsOneWidget,
+    );
+  });
 }

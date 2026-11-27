@@ -18,6 +18,8 @@ class AppSettings {
     this.memberId = '',
     this.memberName = '',
     this.theme = ThemeChoice.system,
+    this.personalMoney = false,
+    this.allowanceRecurrenceId,
   });
 
   final bool setupDone;
@@ -27,16 +29,28 @@ class AppSettings {
   final String memberName;
   final ThemeChoice theme;
 
+  /// Argent personnel activé pour ce membre.
+  final bool personalMoney;
+
+  /// Récurrence du versement mensuel d'argent personnel.
+  final String? allowanceRecurrenceId;
+
   AppSettings copyWith({
     bool? setupDone,
     String? memberId,
     String? memberName,
     ThemeChoice? theme,
+    bool? personalMoney,
+    String? Function()? allowanceRecurrenceId,
   }) => AppSettings(
     setupDone: setupDone ?? this.setupDone,
     memberId: memberId ?? this.memberId,
     memberName: memberName ?? this.memberName,
     theme: theme ?? this.theme,
+    personalMoney: personalMoney ?? this.personalMoney,
+    allowanceRecurrenceId: allowanceRecurrenceId != null
+        ? allowanceRecurrenceId()
+        : this.allowanceRecurrenceId,
   );
 
   Map<String, dynamic> toJson() => {
@@ -44,6 +58,8 @@ class AppSettings {
     'membre': memberId,
     'prenom': memberName,
     'theme': theme.code,
+    'argentPersonnel': personalMoney,
+    'recurrenceArgentPersonnel': allowanceRecurrenceId,
   };
 
   factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
@@ -51,5 +67,7 @@ class AppSettings {
     memberId: j['membre'] as String? ?? '',
     memberName: j['prenom'] as String? ?? '',
     theme: ThemeChoice.fromCode(j['theme'] as String?),
+    personalMoney: j['argentPersonnel'] as bool? ?? false,
+    allowanceRecurrenceId: j['recurrenceArgentPersonnel'] as String?,
   );
 }

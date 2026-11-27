@@ -258,11 +258,19 @@ class OperationTile extends StatelessWidget {
       parts.add(
         '${store.wallet(op.sourceWalletId)?.name ?? '?'} → ${store.wallet(op.targetWalletId)?.name ?? '?'}',
       );
+    } else if (op.type == OperationType.expense && op.targetWalletId != null) {
+      // Dépense qui alimente un portefeuille (versement d'argent personnel).
+      parts.add(
+        '${store.wallet(op.sourceWalletId)?.name ?? '?'} → ${store.wallet(op.targetWalletId)?.name ?? '?'}',
+      );
     } else {
       final w = store.wallet(
         op.type == OperationType.income ? op.targetWalletId : op.sourceWalletId,
       );
       if (w != null) parts.add(w.name);
+    }
+    if (op.personal) {
+      parts.add(op.visibleToPartner ? 'perso, visible' : 'perso, privée');
     }
     if (showDate) parts.add(dayLabel(op.date, now: store.now()).toLowerCase());
     if (op.note.isNotEmpty) parts.add(op.note);
