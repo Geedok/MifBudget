@@ -206,7 +206,6 @@ void main() {
         name: 'Wave',
         type: WalletType.mobileMoney,
         shared: false,
-        private: true,
         openingBalance: 12500,
       );
       final surete = await store.addGoal(
@@ -267,7 +266,6 @@ void main() {
         name: 'Porte-monnaie',
         type: WalletType.cash,
         shared: false,
-        private: true,
       );
       await store.setupPersonalMoney(
         amount: 30000,
@@ -286,12 +284,12 @@ void main() {
           note: 'Argent personnel',
         );
       }
-      for (final (a, cat, note, visible, days) in [
-        (8000, 'cat-loisirs-sorties', 'Sortie entre amis', false, 6),
-        (6500, 'cat-transport-taxi-et-moto', 'Taxi-moto', false, 3),
-        (4000, 'cat-famille', 'Cadeau anniversaire', true, 1),
-        (21000, 'cat-loisirs', '', false, 40),
-        (17500, 'cat-habillement', '', false, 70),
+      for (final (a, cat, note, days) in [
+        (8000, 'cat-loisirs-sorties', 'Sortie entre amis', 6),
+        (6500, 'cat-transport-taxi-et-moto', 'Taxi-moto', 3),
+        (4000, 'cat-famille', 'Cadeau anniversaire', 1),
+        (21000, 'cat-loisirs', '', 40),
+        (17500, 'cat-habillement', '', 70),
       ]) {
         await store.addOperation(
           type: OperationType.expense,
@@ -301,7 +299,6 @@ void main() {
           sourceWalletId: purse.id,
           note: note,
           personal: true,
-          visibleToPartner: visible,
         );
       }
       await store.setBudgets(DateTime(2026, 11), {

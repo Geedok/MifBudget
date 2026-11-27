@@ -101,8 +101,8 @@ class _SyncScreenState extends State<SyncScreen> {
           Text(
             'Les opérations saisies sur un téléphone apparaissent sur '
             'l\'autre, même saisies hors connexion (elles partent dès que '
-            'le réseau revient). Vos portefeuilles privés et vos dépenses '
-            'personnelles privées restent sur votre compte seulement.',
+            'le réseau revient). Votre argent personnel (ses portefeuilles '
+            'et ses dépenses) reste sur votre compte seulement.',
             style: text,
           ),
           const SizedBox(height: 20),

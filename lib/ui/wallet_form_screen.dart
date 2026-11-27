@@ -41,7 +41,6 @@ class _WalletFormScreenState extends State<WalletFormScreen> {
   late WalletType _type;
   late WalletRole _role;
   late bool _shared;
-  late bool _private;
   bool _saving = false;
 
   bool get _editing => widget.existing != null;
@@ -59,7 +58,6 @@ class _WalletFormScreenState extends State<WalletFormScreen> {
     _type = e?.type ?? WalletType.bank;
     _role = e?.role ?? widget.initialRole;
     _shared = e?.shared ?? true;
-    _private = e?.private ?? false;
   }
 
   @override
@@ -80,11 +78,8 @@ class _WalletFormScreenState extends State<WalletFormScreen> {
       result = e.copyWith(
         name: _name.text.trim(),
         type: _type,
-        role: _role,
+        role: _shared ? _role : WalletRole.current,
         openingBalance: opening,
-        shared: _shared,
-        ownerId: () => _shared ? null : (e.ownerId ?? store.settings.memberId),
-        private: !_shared && _private,
       );
       await store.updateWallet(result);
     } else {
@@ -94,7 +89,6 @@ class _WalletFormScreenState extends State<WalletFormScreen> {
         role: _role,
         openingBalance: opening,
         shared: _shared,
-        private: _private,
       );
     }
     if (mounted) Navigator.of(context).pop(result);
@@ -190,54 +184,66 @@ class _WalletFormScreenState extends State<WalletFormScreen> {
               selected: {_type},
               onSelectionChanged: (s) => setState(() => _type = s.first),
             ),
-            label('Rôle'),
-            SegmentedButton<WalletRole>(
-              showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(
-                  value: WalletRole.current,
-                  label: Text('Courant'),
-                ),
-                ButtonSegment(
-                  value: WalletRole.savings,
-                  label: Text('Épargne'),
-                ),
-              ],
-              selected: {_role},
-              onSelectionChanged: (s) => setState(() => _role = s.first),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
-              child: Text(
-                _role == WalletRole.current
-                    ? "L'argent de tous les jours : il compte dans le disponible."
-                    : "L'argent mis de côté : il ne compte pas dans le disponible. "
-                          'Vous pourrez y rattacher un ou plusieurs objectifs.',
-                style: TextStyle(fontSize: 12, color: mif.textSecondary),
-              ),
-            ),
             label('À qui ?'),
             SegmentedButton<bool>(
               showSelectedIcon: false,
               segments: const [
-                ButtonSegment(value: true, label: Text('Commun au foyer')),
-                ButtonSegment(value: false, label: Text('Personnel')),
+                ButtonSegment(
+                  value: true,
+                  icon: Icon(Icons.home_outlined),
+                  label: Text('Au foyer'),
+                ),
+                ButtonSegment(
+                  value: false,
+                  icon: Icon(Icons.lock_outline),
+                  label: Text('Argent personnel'),
+                ),
               ],
               selected: {_shared},
-              onSelectionChanged: (s) => setState(() => _shared = s.first),
+              // Changer un portefeuille déjà utilisé mélangerait l'argent
+              // du foyer et l'argent personnel : on en crée un autre.
+              onSelectionChanged: _editing
+                  ? null
+                  : (s) => setState(() => _shared = s.first),
             ),
-            if (!_shared) ...[
-              const SizedBox(height: 8),
-              SwitchListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                title: const Text('Privé'),
-                subtitle: Text(
-                  _private
-                      ? 'Vous seul verrez ce portefeuille et ses opérations.'
-                      : 'Votre conjoint pourra le voir.',
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
+              child: Text(
+                _shared
+                    ? 'Visible par vous deux, compté dans les chiffres du foyer.'
+                    : 'Votre argent de poche : vous seul le voyez, avec ses '
+                          'dépenses. Il ne compte pas dans les chiffres du foyer.',
+                style: TextStyle(fontSize: 12, color: mif.textSecondary),
+              ),
+            ),
+            if (_shared) ...[
+              label('Rôle'),
+              SegmentedButton<WalletRole>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(
+                    value: WalletRole.current,
+                    label: Text('Courant'),
+                  ),
+                  ButtonSegment(
+                    value: WalletRole.savings,
+                    label: Text('Épargne'),
+                  ),
+                ],
+                selected: {_role},
+                onSelectionChanged: (s) => setState(() => _role = s.first),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
+                child: Text(
+                  _role == WalletRole.current
+                      ? "L'argent de tous les jours : il compte dans l'argent "
+                            'disponible.'
+                      : "L'argent mis de côté : il ne compte pas dans l'argent "
+                            'disponible. Vous pourrez y rattacher un ou '
+                            'plusieurs objectifs.',
+                  style: TextStyle(fontSize: 12, color: mif.textSecondary),
                 ),
-                value: _private,
-                onChanged: (v) => setState(() => _private = v),
               ),
             ],
             const SizedBox(height: 20),

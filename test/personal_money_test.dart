@@ -22,13 +22,11 @@ void main() {
       name: 'Porte-monnaie',
       type: WalletType.cash,
       shared: false,
-      private: true,
     );
     final momo = await store.addWallet(
       name: 'Mobile Money perso',
       type: WalletType.mobileMoney,
       shared: false,
-      private: true,
     );
     return (store, purse, momo);
   }
@@ -87,7 +85,6 @@ void main() {
       categoryId: 'cat-loisirs-sorties',
       sourceWalletId: purse.id,
       personal: true,
-      visibleToPartner: false,
     );
     await store.addOperation(
       type: OperationType.expense,

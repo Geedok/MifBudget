@@ -121,6 +121,7 @@ class BudgetStore extends ChangeNotifier {
     final data = await repo.load();
     final store = BudgetStore._(repo, data, clock ?? DateTime.now);
     if (data.version < 2) await store._migrateToSavingsAccounts();
+    await store._alignPersonalMoney();
     await store.processAutomaticRecurrences();
     // Changements venus de l'autre téléphone : rafraîchir l'affichage et
     // enregistrer les échéances automatiques éventuellement arrivées.
@@ -204,6 +205,36 @@ class BudgetStore extends ChangeNotifier {
       await _repo.upsertOperation(converted);
     }
     _data.version = BudgetData.schemaVersion;
+  }
+
+  /// Version 1.0.3 : seul l'argent personnel est privé. Les portefeuilles
+  /// personnels d'épargne deviennent des comptes du foyer, un revenu reçu
+  /// sur un portefeuille personnel devient personnel, et chaque document est
+  /// rangé selon la nouvelle règle. Sans effet quand tout est déjà en ordre.
+  Future<void> _alignPersonalMoney() async {
+    final me = settings.memberId;
+    final t = now();
+    final toHousehold = <Wallet>[];
+    for (final (i, w) in _data.wallets.indexed) {
+      if (w.shared || !w.isSavings) continue;
+      if (w.ownerId != null && w.ownerId != me) continue;
+      _data.wallets[i] = w.copyWith(
+        shared: true,
+        ownerId: () => null,
+        private: false,
+        updatedAt: t,
+      );
+      toHousehold.add(_data.wallets[i]);
+    }
+    if (toHousehold.isNotEmpty) await _repo.upsertWallets(toHousehold);
+    for (final o in _data.operations.toList()) {
+      if (o.type != OperationType.income || o.personal) continue;
+      if (!isPersonalWallet(o.targetWalletId)) continue;
+      final personal = o.copyWith(personal: true, updatedAt: t);
+      _replace(personal);
+      await _repo.upsertOperation(personal);
+    }
+    await _repo.reconcilePrivacy();
   }
 
   final BudgetRepository _repo;
@@ -390,7 +421,7 @@ class BudgetStore extends ChangeNotifier {
     var saved = 0;
     bool savingsWallet(String? id) => wallet(id)?.isSavings ?? false;
     for (final o in operationsInMonth(month)) {
-      if (o.type == OperationType.income) income += o.amount;
+      if (o.type == OperationType.income && !o.personal) income += o.amount;
       if (o.type == OperationType.expense && !o.personal) expense += o.amount;
       if (o.type.isSavings) continue;
       // Épargne du mois : ce que les comptes épargne ont reçu moins ce qui
@@ -1331,7 +1362,6 @@ class BudgetStore extends ChangeNotifier {
     String note = '',
     bool deleted = false,
     bool personal = false,
-    bool visibleToPartner = true,
   }) async {
     final t = now();
     final op = Operation(
@@ -1348,7 +1378,6 @@ class BudgetStore extends ChangeNotifier {
       deleted: deleted,
       deletedAt: deleted ? t : null,
       personal: personal,
-      visibleToPartner: visibleToPartner,
       note: note.trim(),
       authorId: settings.memberId,
       createdAt: t,
@@ -1418,17 +1447,17 @@ class BudgetStore extends ChangeNotifier {
     WalletRole role = WalletRole.current,
     int openingBalance = 0,
     bool shared = true,
-    bool private = false,
   }) async {
     final w = Wallet(
       id: _uuid.v4(),
       name: name.trim(),
       type: type,
-      role: role,
+      // L'argent personnel est toujours de l'argent courant.
+      role: shared ? role : WalletRole.current,
       openingBalance: openingBalance,
       shared: shared,
       ownerId: shared ? null : settings.memberId,
-      private: !shared && private,
+      private: !shared,
       sortOrder: _data.wallets.length,
       updatedAt: now(),
     );

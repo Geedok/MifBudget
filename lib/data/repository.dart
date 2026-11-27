@@ -103,6 +103,11 @@ abstract class BudgetRepository {
   /// Efface définitivement une opération (seulement pour annuler aussitôt
   /// une échéance confirmée ou ignorée ; sinon, suppression douce).
   Future<void> removeOperation(String id);
+
+  /// Range chaque document là où il doit être (commun au foyer ou privé)
+  /// après un changement des règles de confidentialité. Rien à faire pour
+  /// un stockage sur le téléphone.
+  Future<void> reconcilePrivacy() async {}
 }
 
 /// Stockage en mémoire, pour les tests.

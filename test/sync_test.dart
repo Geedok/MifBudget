@@ -69,7 +69,6 @@ void main() {
       name: 'Porte-monnaie',
       type: WalletType.cash,
       shared: false,
-      private: true,
     );
     await local.addOperation(
       type: OperationType.expense,
@@ -85,7 +84,6 @@ void main() {
       categoryId: 'cat-loisirs',
       sourceWalletId: purse.id,
       personal: true,
-      visibleToPartner: false,
     );
     final service = HouseholdService(firestoreOverride: db);
     final householdId = await service.createHousehold(
@@ -218,7 +216,6 @@ void main() {
         name: 'Porte-monnaie',
         type: WalletType.cash,
         shared: false,
-        private: true,
       );
       // Versement (visible) puis dépense perso privée.
       await eudokia.addOperation(
@@ -236,7 +233,6 @@ void main() {
         categoryId: 'cat-loisirs-sorties',
         sourceWalletId: purse.id,
         personal: true,
-        visibleToPartner: false,
       );
       await eudokia.addOperation(
         type: OperationType.expense,
@@ -250,8 +246,9 @@ void main() {
       expect(eudokia.personalBalance, 18000);
       expect(awa.wallets.map((w) => w.name), isNot(contains('Porte-monnaie')));
       final seenByAwa = awa.operations.map((o) => o.amount).toList();
-      expect(seenByAwa, containsAll([18500, 30000, 4000]));
+      expect(seenByAwa, containsAll([18500, 30000]));
       expect(seenByAwa, isNot(contains(8000)));
+      expect(seenByAwa, isNot(contains(4000)));
       // Les chiffres du foyer sont les mêmes des deux côtés.
       expect(
         awa.monthSummary(clock).expense,
@@ -259,18 +256,36 @@ void main() {
       );
       expect(awa.walletBalance(bank), 451500);
 
-      // Rendre visible une dépense privée la fait apparaître chez Awa.
-      final hidden = eudokia.operations.firstWhere((o) => o.amount == 8000);
-      await eudokia.updateOperation(hidden.copyWith(visibleToPartner: true));
-      await settle();
-      expect(awa.operations.map((o) => o.amount), contains(8000));
-      expect(
-        (await db
-                .collection('foyers/$householdId/prive/uid-eudokia/operations')
-                .get())
-            .docs,
-        isEmpty,
+      // Une facture du foyer payée avec le porte-monnaie : visible chez Awa
+      // et comptée des deux côtés.
+      await eudokia.addOperation(
+        type: OperationType.expense,
+        amount: 5000,
+        date: clock,
+        categoryId: 'cat-logement',
+        sourceWalletId: purse.id,
       );
+      // Un cadeau reçu sur le porte-monnaie : à Eudokia seul.
+      await eudokia.addOperation(
+        type: OperationType.income,
+        amount: 2000,
+        date: clock,
+        categoryId: 'cat-autres-revenus',
+        targetWalletId: purse.id,
+        personal: true,
+      );
+      await settle();
+      expect(awa.operations.map((o) => o.amount), contains(5000));
+      expect(awa.operations.map((o) => o.amount), isNot(contains(2000)));
+      expect(
+        awa.monthSummary(clock).expense,
+        eudokia.monthSummary(clock).expense,
+      );
+      expect(
+        awa.monthSummary(clock).income,
+        eudokia.monthSummary(clock).income,
+      );
+      expect(eudokia.personalReceived(clock), 32000);
 
       // Suppression douce chez Awa, vue chez Eudokia.
       await awa.deleteOperation(op.id);
@@ -318,35 +333,137 @@ void main() {
     },
   );
 
-  test('isPrivateOperation', () {
+  test('isPrivateOperation : seul l\'argent personnel est privé', () {
     Operation op({
+      OperationType type = OperationType.expense,
       String? from,
       String? to,
       bool personal = false,
-      bool visible = true,
     }) => Operation(
       id: 'o',
-      type: OperationType.expense,
+      type: type,
       amount: 1,
       date: clock,
       sourceWalletId: from,
       targetWalletId: to,
       personal: personal,
-      visibleToPartner: visible,
       authorId: 'a',
       createdAt: clock,
       updatedAt: clock,
     );
     bool priv(String id) => id.startsWith('p');
+    const transfer = OperationType.transfer;
+    const income = OperationType.income;
+    // Dépense pour moi, revenu reçu sur mon argent personnel.
+    expect(isPrivateOperation(op(from: 'p1', personal: true), priv), isTrue);
     expect(
-      isPrivateOperation(op(from: 'p1', personal: true, visible: false), priv),
+      isPrivateOperation(op(type: income, to: 'p1', personal: true), priv),
       isTrue,
     );
-    expect(isPrivateOperation(op(from: 'p1', personal: true), priv), isFalse);
-    expect(isPrivateOperation(op(from: 'p1', to: 'p2'), priv), isTrue);
+    // Dépense du foyer payée avec un portefeuille personnel.
+    expect(isPrivateOperation(op(from: 'p1'), priv), isFalse);
+    // Entre mes portefeuilles personnels.
+    expect(
+      isPrivateOperation(op(type: transfer, from: 'p1', to: 'p2'), priv),
+      isTrue,
+    );
+    // Du foyer vers mon argent personnel (versement, dépôt) : visible.
     expect(isPrivateOperation(op(from: 'c1', to: 'p1'), priv), isFalse);
+    expect(
+      isPrivateOperation(op(type: transfer, from: 'c1', to: 'p1'), priv),
+      isFalse,
+    );
     expect(isPrivateOperation(op(from: 'c1'), priv), isFalse);
     expect(isPrivateOperation(op(), priv), isFalse);
+  });
+
+  test('reprise 1.0.3 : l\'argent personnel devient privé, l\'épargne perso '
+      'passe au foyer', () async {
+    final local = await localPhone();
+    final service = HouseholdService(firestoreOverride: db);
+    final householdId = await service.createHousehold(
+      data: local.data,
+      memberId: 'uid-eudokia',
+      memberName: 'Eudokia',
+      oldMemberId: local.settings.memberId,
+    );
+    // Données écrites par la version 1.0.2 : un Mobile Money perso
+    // visible, une dépense perso visible, une épargne perso, un revenu
+    // reçu sur le Mobile Money perso.
+    final foyer = db.collection('foyers').doc(householdId);
+    Map<String, dynamic> wallet(String id, String role) => {
+      'id': id,
+      'nom': id,
+      'type': 'mobile_money',
+      'role': role,
+      'soldeDepart': 0,
+      'commun': false,
+      'proprietaire': 'uid-eudokia',
+      'prive': false,
+      'archive': false,
+      'ordre': 9,
+      'modifieLe': clock.toIso8601String(),
+    };
+    Map<String, dynamic> operation(
+      String id,
+      String type,
+      Map<String, dynamic> extra,
+    ) => {
+      'id': id,
+      'type': type,
+      'montant': 1000,
+      'date': clock.toIso8601String(),
+      'note': '',
+      'auteur': 'uid-eudokia',
+      'creeLe': clock.toIso8601String(),
+      'modifieLe': clock.toIso8601String(),
+      ...extra,
+    };
+    await foyer
+        .collection('portefeuilles')
+        .doc('momo')
+        .set(wallet('momo', 'courant'));
+    await foyer
+        .collection('portefeuilles')
+        .doc('tirelire')
+        .set(wallet('tirelire', 'epargne'));
+    await foyer
+        .collection('operations')
+        .doc('d1')
+        .set(
+          operation('d1', 'depense', {
+            'portefeuilleSource': 'momo',
+            'personnelle': true,
+            'visibleParAutre': true,
+          }),
+        );
+    await foyer
+        .collection('operations')
+        .doc('r1')
+        .set(operation('r1', 'revenu', {'portefeuilleCible': 'momo'}));
+
+    final eudokia = await sharedPhone(householdId, 'uid-eudokia', 'Eudokia');
+    await settle();
+    Future<Set<String>> ids(String path) async =>
+        (await db.collection(path).get()).docs.map((d) => d.id).toSet();
+    final shared = 'foyers/$householdId';
+    final mine = '$shared/prive/uid-eudokia';
+    expect(await ids('$mine/portefeuilles'), {'momo'});
+    expect(await ids('$shared/portefeuilles'), contains('tirelire'));
+    expect(await ids('$shared/portefeuilles'), isNot(contains('momo')));
+    expect(await ids('$mine/operations'), containsAll(['d1', 'r1']));
+    expect(await ids('$shared/operations'), isNot(contains('d1')));
+    expect(eudokia.operation('r1')!.personal, isTrue);
+    expect(eudokia.monthSummary(clock).income, 0);
+    final tirelire = eudokia.wallet('tirelire')!;
+    expect(tirelire.shared, isTrue);
+    expect(tirelire.ownerId, isNull);
+    // Rouvrir ne change plus rien.
+    await eudokia.repository.close();
+    final again = await sharedPhone(householdId, 'uid-eudokia', 'Eudokia');
+    await settle();
+    expect(await ids('$mine/operations'), containsAll(['d1', 'r1']));
+    await again.repository.close();
   });
 
   // Timestamp importé pour les données d'invitation.

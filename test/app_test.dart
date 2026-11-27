@@ -439,9 +439,8 @@ void main() {
     expect(store.unallocated(compte.id), 0);
   });
 
-  testWidgets('ajouter un portefeuille personnel privé depuis les Réglages', (
-    tester,
-  ) async {
+  testWidgets('ajouter un portefeuille d\'argent personnel depuis les '
+      'Réglages', (tester) async {
     final store = await pumpApp(tester);
     await tester.tap(find.byTooltip('Réglages'));
     await tester.pumpAndSettle();
@@ -450,21 +449,19 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'Nom'), 'Wave');
     await tester.tap(find.text('Mobile Money'));
-    await tester.tap(find.text('Personnel'));
+    expect(find.text('Rôle'), findsOneWidget);
+    await tester.tap(find.text('Argent personnel'));
     await tester.pump();
-    await tester.tap(find.text('Privé'));
-    await tester.pump();
-    expect(
-      find.text('Vous seul verrez ce portefeuille et ses opérations.'),
-      findsOneWidget,
-    );
+    // Pas de rôle pour l'argent personnel : c'est de l'argent courant.
+    expect(find.text('Rôle'), findsNothing);
+    expect(find.textContaining('vous seul le voyez'), findsOneWidget);
     await tester.tap(find.text('Enregistrer'));
     await tester.pumpAndSettle();
     final wave = store.wallets.firstWhere((w) => w.name == 'Wave');
     expect(wave.type, WalletType.mobileMoney);
     expect(wave.isPrivate, isTrue);
     expect(wave.isSavings, isFalse);
-    expect(find.text('Mobile Money · Personnel, privé'), findsOneWidget);
+    expect(find.text('Mobile Money · Argent personnel'), findsOneWidget);
   });
 
   testWidgets('tendances, projection et simulateur', (tester) async {
@@ -819,8 +816,8 @@ void main() {
       find.widgetWithText(TextField, 'Montant mensuel'),
       '30000',
     );
-    await reveal(tester, 'Créer « Porte-monnaie » (espèces, privé)');
-    await tester.tap(find.text('Créer « Porte-monnaie » (espèces, privé)'));
+    await reveal(tester, 'Créer « Porte-monnaie » (espèces)');
+    await tester.tap(find.text('Créer « Porte-monnaie » (espèces)'));
     await tester.pumpAndSettle();
     await reveal(tester, "Activer l'argent personnel");
     await tester.tap(find.text("Activer l'argent personnel").last);
@@ -851,7 +848,7 @@ void main() {
     await tester.tap(find.text('Porte-monnaie'));
     await tester.pump();
     await tester.scrollUntilVisible(
-      find.text('Payée avec votre argent personnel, visible par vous seul.'),
+      find.text('Votre argent personnel : vous seul verrez cette dépense.'),
       100,
       scrollable: find
           .descendant(
@@ -861,7 +858,7 @@ void main() {
           .first,
     );
     expect(
-      find.text('Payée avec votre argent personnel, visible par vous seul.'),
+      find.text('Votre argent personnel : vous seul verrez cette dépense.'),
       findsOneWidget,
     );
     await tester.tap(find.text('Enregistrer'));
@@ -870,7 +867,6 @@ void main() {
       (o) => o.type == OperationType.expense,
     );
     expect(op.personal, isTrue);
-    expect(op.visibleToPartner, isFalse);
     expect(store.monthSummary(DateTime(2026, 11)).expense, 0);
     expect(store.personalBalance, 3000);
 

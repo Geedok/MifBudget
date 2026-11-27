@@ -49,12 +49,15 @@ class Wallet {
   final WalletRole role;
   final int openingBalance;
 
-  /// Commun au foyer (visible des deux) ou personnel à [ownerId].
+  /// Du foyer (visible des deux, compté dans les chiffres du foyer), ou
+  /// argent personnel de [ownerId] : toujours privé, son propriétaire seul
+  /// le voit, avec ses opérations.
   final bool shared;
   final String? ownerId;
 
-  /// Portefeuille personnel privé : son propriétaire seul le voit, avec ses
-  /// opérations. Sans effet sur un portefeuille commun.
+  /// Ancien interrupteur « privé » (versions 0.4 à 1.0.2) : un portefeuille
+  /// personnel est désormais toujours privé. Gardé pour relire les données
+  /// et toujours écrit égal à `!shared`.
   final bool private;
 
   /// Montant mensuel d'un portefeuille personnel (argent personnel).
@@ -64,7 +67,10 @@ class Wallet {
   final DateTime updatedAt;
 
   bool get isSavings => role == WalletRole.savings;
-  bool get isPrivate => !shared && private;
+
+  /// Argent personnel : privé, hors chiffres du foyer.
+  bool get isPersonal => !shared;
+  bool get isPrivate => !shared;
 
   Wallet copyWith({
     String? name,
@@ -100,7 +106,7 @@ class Wallet {
     'soldeDepart': openingBalance,
     'commun': shared,
     'proprietaire': ownerId,
-    'prive': private,
+    'prive': !shared,
     'montantMensuel': monthlyAmount,
     'archive': archived,
     'ordre': sortOrder,

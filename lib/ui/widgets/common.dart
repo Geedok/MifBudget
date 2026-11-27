@@ -120,11 +120,11 @@ const goalIcons = <String, IconData>{
 
 IconData goalIcon(String? key) => goalIcons[key] ?? Icons.savings_outlined;
 
-/// « Banque · Épargne · Personnel, privé ».
+/// « Banque · Épargne », « Espèces · Argent personnel ».
 String walletDescription(Wallet w) => [
   w.type.label,
   if (w.isSavings) 'Épargne',
-  if (!w.shared) w.private ? 'Personnel, privé' : 'Personnel, visible',
+  if (w.isPersonal) 'Argent personnel',
 ].join(' · ');
 
 IconData walletIcon(WalletType type) => switch (type) {
@@ -319,11 +319,9 @@ class OperationTile extends StatelessWidget {
             if (op.personal) ...[
               const SizedBox(width: 8),
               Icon(
-                op.visibleToPartner ? Icons.person_outline : Icons.lock_outline,
+                Icons.lock_outline,
                 size: 16,
-                semanticLabel: op.visibleToPartner
-                    ? 'Dépense perso, visible'
-                    : 'Dépense perso, privée',
+                semanticLabel: 'Argent personnel, privé',
                 color: mif.textSecondary,
               ),
             ],

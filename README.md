@@ -18,7 +18,7 @@ Application Android de budget familial (Flutter). Voir `CLAUDE.md` pour le cahie
 - Onglet Rapports, « Bilan du mois » : revenus, dépenses et reste ; revenus par source comparés au mois précédent ; revenus et dépenses sur 6 mois (toucher un mois pour l'afficher) ; dépenses par catégorie ; détail des revenus.
 
 **Étape 3 : suivi de l'épargne** (version 0.4.0, revue après la 0.3.0)
-- Portefeuilles multiples (Réglages ou tuiles de l'Accueil) : nom, type (espèces, banque, Mobile Money), rôle (courant ou épargne), commun au foyer ou personnel, privé ou visible, solde de départ, archivage.
+- Portefeuilles multiples (Réglages ou tuiles de l'Accueil) : nom, type (espèces, banque, Mobile Money), rôle (courant ou épargne), du foyer ou argent personnel (toujours privé, depuis la 1.0.3), solde de départ, archivage.
 - Épargner = virer d'un compte courant vers un compte épargne (onglet « Épargne » de la saisie rapide, ou Verser / Retirer). Disponible = comptes courants ; total épargné = comptes épargne.
 - Objectifs (sûreté, construction…) rattachés à un compte épargne : un seul objectif a tout le solde du compte ; plusieurs se partagent le compte (part de départ + virements marqués), le reste est « non réparti ».
 - Onglet Épargnes : total épargné, épargne du mois, puis chaque compte avec ses objectifs (progression, reste, versement mensuel pour la date cible, mois de dépenses couverts pour la sûreté).
@@ -50,15 +50,15 @@ Application Android de budget familial (Flutter). Voir `CLAUDE.md` pour le cahie
 **Argent personnel** (version 0.9.0)
 - Réglages → Argent personnel : montant mensuel, jour, portefeuille commun d'où part le versement, portefeuille personnel qui le reçoit (« Créer Porte-monnaie » en un toucher). Versement « à confirmer » chaque mois, montant modifiable ; compté comme dépense du foyer (catégorie Argent personnel).
 - Argent personnel réparti sur un ou plusieurs portefeuilles personnels (porte-monnaie, Mobile Money perso) ; le disponible du foyer ne compte que les portefeuilles communs.
-- Saisie avec un portefeuille personnel : « Pour : moi (privé) · moi (visible) · le foyer ». Les dépenses perso ne comptent pas dans les chiffres du foyer (le versement y est déjà).
-- « Mon argent personnel » (Accueil), visible par soi seul : reste, reçu et dépensé du mois, détail par portefeuille, par catégorie, mois par mois, dépenses privées ou visibles.
+- Saisie avec un portefeuille personnel : « Pour : moi · le foyer ». Les dépenses perso sont privées et ne comptent pas dans les chiffres du foyer (le versement y est déjà).
+- « Mon argent personnel » (Accueil), visible par soi seul : reste, reçu et dépensé du mois, détail par portefeuille, par catégorie, mois par mois, dépenses du mois.
 - Plus tard : interrupteur « Avance sur mon argent personnel » (voir CLAUDE.md).
 
 **Synchronisation entre les deux téléphones** (version 1.0.0)
 - Réglages → Partage du foyer : « Créer le foyer partagé » (connexion Google, les données du téléphone deviennent celles du foyer), puis « Inviter mon conjoint » (code de 8 caractères, valable 7 jours, une seule fois).
 - Sur l'autre téléphone, dès la première ouverture : « Rejoindre le foyer de mon conjoint » avec le code.
 - Fonctionne hors connexion (cache Firestore) : les saisies partent dès que le réseau revient. Prénom de l'auteur affiché sur les opérations de l'autre.
-- Confidentialité côté serveur : portefeuilles privés et dépenses perso privées dans `foyers/{id}/prive/{membre}`, lisibles par leur seul propriétaire (`firestore.rules`).
+- Confidentialité côté serveur : portefeuilles et opérations d'argent personnel dans `foyers/{id}/prive/{membre}`, lisibles par leur seul propriétaire (`firestore.rules`).
 - Verrouillage : code à 4 chiffres (et empreinte en option), demandé à l'ouverture et après 5 minutes hors de l'application.
 
 **Logo et écran de chargement** (version 1.0.1)
@@ -73,6 +73,11 @@ Application Android de budget familial (Flutter). Voir `CLAUDE.md` pour le cahie
 - Épargnes : une phrase par objectif, les calculs dans le détail.
 - Réglages rangés : Mon foyer, Mon budget, Mes comptes, Sécurité, Apparence.
 - Présentation en 3 écrans à la première ouverture (et une fois après la mise à jour), à revoir dans les Réglages.
+
+**Seul l'argent personnel est privé** (version 1.0.3)
+- Deux sortes de portefeuilles : du foyer (visibles des deux, courants ou épargne) et argent personnel (toujours privés).
+- Saisie avec un portefeuille personnel : « Pour : moi » (privée, hors foyer) ou « le foyer » (visible, comptée). Un revenu reçu sur un portefeuille personnel reste personnel.
+- Reprise automatique : les portefeuilles personnels visibles deviennent privés, l'épargne personnelle devient une épargne du foyer.
 
 ### Firebase
 

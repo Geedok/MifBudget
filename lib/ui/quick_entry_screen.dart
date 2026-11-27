@@ -25,7 +25,9 @@ class EntryResult {
 }
 
 /// Pour qui est une dépense payée avec un portefeuille personnel.
-enum _SpentFor { mePrivate, meVisible, household }
+/// Dépense payée avec un portefeuille personnel : pour moi (privée, hors
+/// foyer) ou pour le foyer (visible, comptée).
+enum _SpentFor { me, household }
 
 /// Usage de l'écran de saisie.
 enum EntryMode {
@@ -102,7 +104,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
   String? _walletId; // dépense : débité ; revenu : crédité ; épargne : lieu
   String? _goalId; // épargne
   String? _projectId; // dépense rattachée à un projet
-  _SpentFor _for = _SpentFor.mePrivate; // dépense avec un portefeuille perso
+  _SpentFor _for = _SpentFor.me; // dépense avec un portefeuille perso
   String? _fromId; // transfert
   String? _toId; // transfert
   late DateTime _date;
@@ -128,14 +130,12 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       _note.text = e.note;
       _goalId = e.savingsGoalId;
       _projectId = e.projectId;
-      _for = !e.personal
-          ? (e.type == OperationType.expense &&
-                    store.isPersonalWallet(e.sourceWalletId)
-                ? _SpentFor.household
-                : _SpentFor.mePrivate)
-          : e.visibleToPartner
-          ? _SpentFor.meVisible
-          : _SpentFor.mePrivate;
+      _for =
+          !e.personal &&
+              e.type == OperationType.expense &&
+              store.isPersonalWallet(e.sourceWalletId)
+          ? _SpentFor.household
+          : _SpentFor.me;
       if (e.type == OperationType.transfer) {
         _fromId = e.sourceWalletId;
         _toId = e.targetWalletId;
@@ -289,13 +289,14 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     final category = isTransfer ? null : _categoryId;
     final goalId = _type.isSavings ? _goalId : null;
     final projectId = type == OperationType.expense ? _projectId : null;
-    // Dépense avec mon argent personnel : hors dépenses du foyer, privée
-    // sauf si je la rends visible.
+    // Argent personnel (privé, hors chiffres du foyer) : dépense « pour
+    // moi » payée avec un portefeuille personnel, ou revenu reçu sur l'un
+    // d'eux.
     final personal =
-        type == OperationType.expense &&
-        store.isPersonalWallet(source) &&
-        _for != _SpentFor.household;
-    final visible = !personal || _for == _SpentFor.meVisible;
+        (type == OperationType.expense &&
+            store.isPersonalWallet(source) &&
+            _for == _SpentFor.me) ||
+        (incoming && store.isPersonalWallet(target));
     final EntryResult result;
     if (widget.mode == EntryMode.draft) {
       final t = store.now();
@@ -321,7 +322,6 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         projectId: () => projectId,
         note: _note.text.trim(),
         personal: personal,
-        visibleToPartner: visible,
       );
       if (mounted) Navigator.of(context).pop(EntryResult(draft));
       return;
@@ -340,7 +340,6 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         projectId: projectId,
         note: _note.text,
         personal: personal,
-        visibleToPartner: visible,
       );
       result = EntryResult(op, created: true);
     } else if (_editing) {
@@ -355,7 +354,6 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         projectId: () => projectId,
         note: _note.text.trim(),
         personal: personal,
-        visibleToPartner: visible,
       );
       await store.updateOperation(updated);
       result = EntryResult(updated);
@@ -371,7 +369,6 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         projectId: projectId,
         note: _note.text,
         personal: personal,
-        visibleToPartner: visible,
       );
       result = EntryResult(op, created: true);
     }
@@ -501,6 +498,19 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
                       selectedId: _walletId,
                       onSelected: (id) => setState(() => _walletId = id),
                     ),
+                    if (_type == OperationType.income &&
+                        store.isPersonalWallet(_walletId))
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          'Reçu sur votre argent personnel : vous seul le '
+                          'verrez, il ne compte pas dans les revenus du foyer.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: mif.textSecondary,
+                          ),
+                        ),
+                      ),
                     if (_type == OperationType.expense &&
                         store.isPersonalWallet(_walletId)) ...[
                       const SizedBox(height: 12),
@@ -510,16 +520,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
                         runSpacing: 4,
                         children: [
                           for (final (value, label, icon) in [
-                            (
-                              _SpentFor.mePrivate,
-                              'Moi · privé',
-                              Icons.lock_outline,
-                            ),
-                            (
-                              _SpentFor.meVisible,
-                              'Moi · visible',
-                              Icons.visibility_outlined,
-                            ),
+                            (_SpentFor.me, 'Moi', Icons.lock_outline),
                             (
                               _SpentFor.household,
                               'Le foyer',
@@ -538,11 +539,13 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
                         padding: const EdgeInsets.only(top: 6),
                         child: Text(
                           switch (_for) {
-                            _SpentFor.mePrivate => 'Payée avec votre argent personnel, visible par vous seul.',
-                            _SpentFor.meVisible => 'Payée avec votre argent personnel, visible du foyer.',
+                            _SpentFor.me =>
+                              'Votre argent personnel : vous seul verrez '
+                                  'cette dépense.',
                             _SpentFor.household =>
-                              'Une dépense du foyer payée depuis ce portefeuille : '
-                                  'elle compte dans le budget familial.',
+                              'Une dépense du foyer payée depuis ce '
+                                  'portefeuille : elle compte dans le budget '
+                                  'familial et votre conjoint la voit.',
                           },
                           style: TextStyle(
                             fontSize: 12,

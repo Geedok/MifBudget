@@ -458,21 +458,21 @@ void main() {
       expect(store.goalBalance(gb.id), 2500000);
     });
 
-    test('portefeuille personnel privé', () async {
+    test('portefeuille personnel : toujours privé, jamais épargne', () async {
       final store = await newStore();
       final wave = await store.addWallet(
         name: 'Wave',
         type: WalletType.mobileMoney,
+        role: WalletRole.savings,
         shared: false,
-        private: true,
       );
       expect(wave.isPrivate, isTrue);
+      expect(wave.isPersonal, isTrue);
+      expect(wave.isSavings, isFalse);
       expect(wave.ownerId, store.settings.memberId);
-      // Un portefeuille commun n'est jamais privé.
       final commun = await store.addWallet(
         name: 'Caisse',
         type: WalletType.cash,
-        private: true,
       );
       expect(commun.isPrivate, isFalse);
       expect(commun.ownerId, isNull);
@@ -557,8 +557,6 @@ void main() {
         type: WalletType.bank,
         role: WalletRole.savings,
         openingBalance: 2400000,
-        shared: false,
-        private: true,
       );
       final g = await store.addGoal(
         name: 'Épargne de construction',
@@ -581,7 +579,7 @@ void main() {
       );
       final w = reopened.savingsWallets.single;
       expect(w.isSavings, isTrue);
-      expect(w.isPrivate, isTrue);
+      expect(w.isPrivate, isFalse);
       final loaded = reopened.goals.single;
       expect(loaded.targetDate, DateTime(2028, 12));
       expect(loaded.walletId, compte.id);

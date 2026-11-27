@@ -28,13 +28,16 @@ class Paths {
   static const private = 'prive';
 }
 
-/// Une opération est privée si c'est une dépense perso non rendue visible,
-/// ou (hors dépense perso) si elle ne touche que des portefeuilles privés (ex. du porte-monnaie
-/// vers le Mobile Money perso). Le versement d'argent personnel (d'un
-/// portefeuille commun vers un portefeuille privé) reste visible du foyer.
+/// Seul l'argent personnel est privé : une opération l'est si elle est
+/// personnelle (dépense « pour moi » payée avec un portefeuille personnel,
+/// revenu reçu sur l'un d'eux) ou si c'est un transfert entre portefeuilles
+/// personnels (ex. du porte-monnaie vers le Mobile Money perso). Tout le
+/// reste concerne le foyer et se voit des deux côtés : le versement d'argent
+/// personnel, un dépôt d'argent du foyer sur un portefeuille personnel, une
+/// dépense du foyer payée avec un portefeuille personnel.
 bool isPrivateOperation(Operation op, bool Function(String id) privateWallet) {
-  // Une dépense perso suit le choix fait à la saisie (privée ou visible).
-  if (op.personal) return !op.visibleToPartner;
+  if (op.personal) return true;
+  if (op.type != OperationType.transfer) return false;
   final ids = [op.sourceWalletId, op.targetWalletId].whereType<String>();
   return ids.isNotEmpty && ids.every(privateWallet);
 }
@@ -273,6 +276,35 @@ class FirestoreRepository extends BudgetRepository {
     _delete(_shared(Paths.operations).doc(id));
     _delete(_private(Paths.operations).doc(id));
     _rebuild();
+  }
+
+  @override
+  Future<void> reconcilePrivacy() async {
+    // Mes portefeuilles personnels vont dans ma partie privée ; ceux du
+    // foyer dans la partie commune.
+    final wallets = [
+      for (final w in _sharedWallets.values)
+        if (w.isPrivate && (w.ownerId == null || w.ownerId == memberId)) w,
+      for (final w in _privateWallets.values)
+        if (!w.isPrivate) w,
+    ];
+    if (wallets.isNotEmpty) await upsertWallets(wallets);
+    // Mes opérations d'argent personnel deviennent privées ; une opération
+    // du foyer rangée dans ma partie privée redevient commune. Celles de
+    // mon conjoint sont rangées par son téléphone.
+    bool mine(Operation o) =>
+        o.authorId == memberId ||
+        _privateWallets.containsKey(o.sourceWalletId) ||
+        _privateWallets.containsKey(o.targetWalletId);
+    final ops = [
+      for (final o in _sharedOps.values)
+        if (mine(o) && isPrivateOperation(o, _isPrivateWallet)) o,
+      for (final o in _privateOps.values)
+        if (!isPrivateOperation(o, _isPrivateWallet)) o,
+    ];
+    for (final o in ops) {
+      await upsertOperation(o);
+    }
   }
 
   @override

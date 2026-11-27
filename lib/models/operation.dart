@@ -32,7 +32,6 @@ class Operation {
     this.recurrenceId,
     this.savingsGoalId,
     this.note = '',
-    this.visibleToPartner = true,
     this.personal = false,
     required this.authorId,
     required this.createdAt,
@@ -60,10 +59,11 @@ class Operation {
   final String? recurrenceId;
   final String? savingsGoalId;
   final String note;
-  final bool visibleToPartner;
 
-  /// Dépense faite avec l'argent personnel de son auteur : elle ne compte
-  /// pas dans les dépenses du foyer (le versement mensuel y est déjà).
+  /// Argent personnel de son auteur : dépense « pour moi » payée avec un
+  /// portefeuille personnel, ou revenu reçu sur l'un d'eux. Privée (son
+  /// auteur seul la voit) et hors chiffres du foyer (le versement mensuel y
+  /// est déjà).
   final bool personal;
   final String authorId;
   final DateTime createdAt;
@@ -84,7 +84,6 @@ class Operation {
     String? Function()? projectId,
     String? Function()? recurrenceId,
     String? note,
-    bool? visibleToPartner,
     bool? personal,
     DateTime? updatedAt,
     bool? deleted,
@@ -105,7 +104,6 @@ class Operation {
     recurrenceId: recurrenceId != null ? recurrenceId() : this.recurrenceId,
     savingsGoalId: savingsGoalId != null ? savingsGoalId() : this.savingsGoalId,
     note: note ?? this.note,
-    visibleToPartner: visibleToPartner ?? this.visibleToPartner,
     personal: personal ?? this.personal,
     authorId: authorId,
     createdAt: createdAt,
@@ -126,7 +124,6 @@ class Operation {
     'recurrence': recurrenceId,
     'objectifEpargne': savingsGoalId,
     'note': note,
-    'visibleParAutre': visibleToPartner,
     'personnelle': personal,
     'auteur': authorId,
     'creeLe': createdAt.toIso8601String(),
@@ -147,7 +144,6 @@ class Operation {
     recurrenceId: j['recurrence'] as String?,
     savingsGoalId: j['objectifEpargne'] as String?,
     note: j['note'] as String? ?? '',
-    visibleToPartner: j['visibleParAutre'] as bool? ?? true,
     personal: j['personnelle'] as bool? ?? false,
     authorId: j['auteur'] as String,
     createdAt: DateTime.parse(j['creeLe'] as String),

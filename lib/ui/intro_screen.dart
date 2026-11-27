@@ -262,10 +262,11 @@ class _TogetherPage extends StatelessWidget {
       picture: Icon(Icons.people_outline, size: 80, color: mif.green),
       title: 'À deux, chacun son téléphone',
       text:
-          'Ce que vous saisissez apparaît chez votre conjoint. Votre argent '
-          'personnel reste à vous : vos dépenses privées ne sont visibles '
-          "que par vous.\n\nComptes, catégories, partage et code : tout est "
-          "dans les Réglages, la roue en haut de l'Accueil.",
+          'Tout ce qui concerne le foyer, revenus et dépenses, se voit sur '
+          'les deux téléphones. Seul votre argent personnel reste privé : '
+          "vous seul voyez ce que vous en faites.\n\nComptes, catégories, "
+          "partage et code : tout est dans les Réglages, la roue en haut de "
+          "l'Accueil.",
     );
   }
 }

@@ -78,7 +78,7 @@ class PersonalMoneyCard extends StatelessWidget {
 }
 
 /// « Mon argent personnel » : reste, dépenses du mois par catégorie, mois
-/// par mois, et mes dépenses (privées ou visibles). Visible par soi seul.
+/// par mois, et mes dépenses. Visible par soi seul.
 class PersonalMoneyScreen extends StatefulWidget {
   const PersonalMoneyScreen({super.key});
 
@@ -294,7 +294,7 @@ class _PersonalMoneyScreenState extends State<PersonalMoneyScreen> {
                     child: Text(
                       'Aucune dépense personnelle en ${monthName(month)}. '
                       'Payez avec votre portefeuille personnel dans la saisie '
-                      'rapide : elle sera privée par défaut.',
+                      'rapide : vous seul la verrez.',
                       style: TextStyle(fontSize: 14, color: mif.textSecondary),
                     ),
                   ),
@@ -470,7 +470,6 @@ class _PersonalMoneySetupScreenState extends State<PersonalMoneySetupScreen> {
       name: 'Porte-monnaie',
       type: WalletType.cash,
       shared: false,
-      private: true,
     );
     setState(() => _toId = w.id);
   }
@@ -619,7 +618,7 @@ class _PersonalMoneySetupScreenState extends State<PersonalMoneySetupScreen> {
               child: TextButton.icon(
                 onPressed: _createPurse,
                 icon: const Icon(Icons.add),
-                label: const Text('Créer « Porte-monnaie » (espèces, privé)'),
+                label: const Text('Créer « Porte-monnaie » (espèces)'),
               ),
             ),
             Text(
@@ -658,9 +657,8 @@ class _PersonalMoneySetupScreenState extends State<PersonalMoneySetupScreen> {
   }
 }
 
-/// Une dépense personnelle : sa note (ou sa catégorie), et si elle est
-/// privée ou visible du foyer. Toucher pour la modifier (et changer sa
-/// visibilité).
+/// Une dépense personnelle : sa note (ou sa catégorie), le portefeuille et
+/// le jour. Toucher pour la modifier.
 class _PersonalExpenseTile extends StatelessWidget {
   const _PersonalExpenseTile({required this.operation});
 
@@ -671,7 +669,6 @@ class _PersonalExpenseTile extends StatelessWidget {
     final store = StoreScope.of(context);
     final mif = context.mif;
     final op = operation;
-    final visible = op.visibleToPartner;
     return InkWell(
       onTap: () => openEntry(context, existing: op),
       child: Padding(
@@ -695,32 +692,14 @@ class _PersonalExpenseTile extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Icon(
-                        visible
-                            ? Icons.visibility_outlined
-                            : Icons.lock_outline,
-                        size: 13,
-                        color: visible ? mif.green : mif.textSecondary,
-                      ),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          '${visible ? 'Visible du foyer' : 'Privée'} · '
-                          '${dayLabel(op.date, now: store.now()).toLowerCase()}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: visible
-                                ? FontWeight.w600
-                                : FontWeight.w400,
-                            color: visible ? mif.green : mif.textSecondary,
-                          ),
-                        ),
-                      ),
-                    ],
+                  Text(
+                    [
+                      ?store.wallet(op.sourceWalletId)?.name,
+                      dayLabel(op.date, now: store.now()).toLowerCase(),
+                    ].join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: mif.textSecondary),
                   ),
                 ],
               ),
