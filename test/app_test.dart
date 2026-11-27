@@ -188,11 +188,12 @@ void main() {
     expect(store.totalBalance, 20000);
   });
 
-  testWidgets("l'accueil montre d'où viennent les revenus du mois", (
+  testWidgets("l'accueil montre l'argent entré, dépensé et le reste du mois", (
     tester,
   ) async {
     final store = await pumpApp(tester);
-    expect(find.text('Aucun revenu saisi en novembre.'), findsOneWidget);
+    expect(find.text('Argent disponible'), findsOneWidget);
+    expect(find.text('Entré ce mois'), findsOneWidget);
 
     Future<void> income(int a, String cat, DateTime d) => store.addOperation(
       type: OperationType.income,
@@ -213,31 +214,66 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Revenus de novembre'), findsOneWidget);
-    expect(find.text('650${nbsp}000${nbsp}FCFA'), findsOneWidget);
-    expect(find.text('+50${nbsp}000 par rapport à octobre'), findsOneWidget);
-    expect(find.text('Salaires'), findsWidgets);
-    expect(find.text('92$nbsp%'), findsOneWidget);
-    expect(find.text('Activités annexes'), findsWidgets);
-    expect(
-      find.textContaining('soit 25$nbsp% des revenus', findRichText: true),
-      findsWidgets,
-    );
+    expect(find.text('650${nbsp}000'), findsOneWidget);
+    expect(find.text('162${nbsp}500'), findsOneWidget);
+    expect(find.text('487${nbsp}500'), findsOneWidget);
 
-    // Toucher la carte ouvre le bilan du mois.
-    await tester.tap(find.text('Revenus de novembre'));
+    // Toucher la carte ouvre le bilan du mois, avec le détail des revenus.
+    await tester.tap(find.text('Argent disponible'));
     await tester.pumpAndSettle();
     expect(find.text('Bilan du mois'), findsOneWidget);
     expect(find.text('Revenus par source'), findsOneWidget);
     expect(find.text('+0 par rapport à octobre'), findsNothing);
     expect(find.text('Comme en octobre'), findsOneWidget);
     expect(find.text('Rien en octobre'), findsOneWidget);
+    expect(
+      find.textContaining('soit 25$nbsp% des revenus', findRichText: true),
+      findsWidgets,
+    );
   });
 
-  testWidgets('« Saisir un revenu » ouvre la saisie sur Revenu', (
+  testWidgets('la présentation se montre une fois, puis l\'Accueil', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final store = await BudgetStore.open(
+      MemoryRepository(),
+      clock: () => clock,
+    );
+    await store.completeSetup(memberName: 'Eudokia');
+    await tester.pumpWidget(MifBudgetApp(store: store, showIntro: true));
+    await tester.pumpAndSettle();
+    expect(find.text('Une dépense en quelques secondes'), findsOneWidget);
+    await tester.tap(find.text('Suivant'));
+    await tester.pumpAndSettle();
+    expect(find.text('Cinq onglets, en bas'), findsOneWidget);
+    await tester.tap(find.text('Suivant'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("C'est parti"));
+    await tester.pumpAndSettle();
+    expect(store.settings.introSeen, isTrue);
+    expect(find.text('Argent disponible'), findsOneWidget);
+  });
+
+  testWidgets("« Mes comptes » liste les portefeuilles et leur solde", (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('Mes comptes'));
+    await tester.pumpAndSettle();
+    expect(find.text('Argent de tous les jours'), findsOneWidget);
+    expect(find.text('Banque'), findsOneWidget);
+    expect(find.text('Ajouter un portefeuille'), findsOneWidget);
+  });
+
+  testWidgets('« Saisir un revenu » (bilan) ouvre la saisie sur Revenu', (
     tester,
   ) async {
     final store = await pumpApp(tester);
+    await tester.tap(find.text('Rapports'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Saisir un revenu'));
     await tester.pumpAndSettle();
     await type(tester, ['5', '0', '000']);
@@ -365,7 +401,7 @@ void main() {
       // Accueil : disponible = comptes courants.
       await tester.tap(find.text('Accueil'));
       await tester.pumpAndSettle();
-      expect(find.text('Disponible'), findsOneWidget);
+      expect(find.text('Argent disponible'), findsOneWidget);
       expect(find.text('15${nbsp}000${nbsp}FCFA'), findsOneWidget);
     },
   );
@@ -777,8 +813,7 @@ void main() {
     final store = await pumpApp(tester);
     await tester.tap(find.byTooltip('Réglages'));
     await tester.pumpAndSettle();
-    await reveal(tester, "Activer l'argent personnel");
-    await tester.tap(find.text("Activer l'argent personnel").last);
+    await tester.tap(find.text('Argent personnel').last);
     await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextField, 'Montant mensuel'),

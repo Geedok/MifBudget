@@ -54,12 +54,13 @@ class RecurrencesScreen extends StatelessWidget {
         children: [
           Text(
             'Loyer, salaire, abonnements, virements d\'épargne : elles '
-            'reviennent chaque mois. Le jour venu, MifBudget vous les propose '
-            'à confirmer sur l\'Accueil (ou les enregistre seules si vous '
-            'avez choisi « automatique »).',
+            'reviennent chaque mois. Le jour venu, elles apparaissent sur '
+            'l\'Accueil pour être confirmées (ou s\'enregistrent seules si '
+            'elles sont automatiques).',
             style: TextStyle(fontSize: 13, color: mif.textSecondary),
           ),
           const SizedBox(height: 12),
+          const RecurringCard(showPending: false),
           if (list.isNotEmpty)
             MifCard(
               padding: const EdgeInsets.symmetric(vertical: 4),
@@ -499,14 +500,28 @@ class _RecurrenceFormScreenState extends State<RecurrenceFormScreen> {
 
 /// Accueil : échéances à confirmer, puis celles des 30 prochains jours.
 class RecurringCard extends StatelessWidget {
-  const RecurringCard({super.key});
+  const RecurringCard({
+    super.key,
+    this.showPending = true,
+    this.showUpcoming = true,
+  });
+
+  /// « À confirmer » (l'Accueil n'affiche que celles-ci).
+  final bool showPending;
+
+  /// « À venir » dans les 30 jours.
+  final bool showUpcoming;
 
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
     final mif = context.mif;
-    final pending = store.pendingOccurrences;
-    final upcoming = store.upcomingOccurrences().take(4).toList();
+    final pending = showPending
+        ? store.pendingOccurrences
+        : const <Occurrence>[];
+    final upcoming = showUpcoming
+        ? store.upcomingOccurrences().take(4).toList()
+        : const <Occurrence>[];
     if (pending.isEmpty && upcoming.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),

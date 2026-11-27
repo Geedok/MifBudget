@@ -62,7 +62,7 @@ class SavingsScreen extends StatelessWidget {
                             : formatSigned(month.saved),
                       ),
                       _Figure(
-                        label: 'Disponible (comptes courants)',
+                        label: 'Argent disponible',
                         value: formatAmount(store.available),
                       ),
                     ],
@@ -273,7 +273,7 @@ class _AccountSection extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Non réparti',
+                        'Sans objectif',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -380,10 +380,14 @@ class GoalCard extends StatelessWidget {
     required this.goal,
     this.onTap,
     this.showWallet = true,
+    this.detailed = false,
   });
 
   final SavingsGoal goal;
   final VoidCallback? onTap;
+
+  /// Tous les calculs (détail de l'objectif) ; sinon une seule phrase.
+  final bool detailed;
 
   /// Rappeler le compte épargne (inutile sous l'en-tête du compte).
   final bool showWallet;
@@ -430,6 +434,26 @@ class GoalCard extends StatelessWidget {
     }
     final wallet = store.wallet(goal.walletId);
     if (wallet != null && showWallet) notes.add('Sur ${wallet.name}');
+    if (!detailed && !reached && goal.target > 0) {
+      // Une phrase : ce qui reste, et quand on y arrive.
+      final perMonth = store.monthlyNeeded(goal);
+      final reach = store.goalReachDate(goal);
+      final t = store.now();
+      final future =
+          date != null && date.year * 12 + date.month >= t.year * 12 + t.month;
+      final rest = 'Il reste ${formatFcfa(goal.target - balance)}';
+      notes
+        ..clear()
+        ..add(
+          future && perMonth != null
+              ? '$rest · ${formatFcfa(perMonth)} par mois'
+              : reach != null
+              ? '$rest · atteint vers ${monthLabel(reach).toLowerCase()}'
+              : rest,
+        );
+    } else if (!detailed) {
+      notes.clear();
+    }
 
     return Material(
       color: mif.card,
@@ -572,7 +596,7 @@ class GoalDetailScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: [
-          GoalCard(goal: goal),
+          GoalCard(goal: goal, detailed: true),
           if (store.goalBalance(goal.id) < goal.target) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),

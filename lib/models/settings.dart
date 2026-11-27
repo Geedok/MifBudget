@@ -25,6 +25,7 @@ class AppSettings {
     this.pinHash,
     this.pinSalt,
     this.biometric = false,
+    this.introSeen = false,
   });
 
   final bool setupDone;
@@ -54,6 +55,9 @@ class AppSettings {
   /// Déverrouiller aussi avec l'empreinte digitale.
   final bool biometric;
 
+  /// Présentation de l'application déjà vue sur ce téléphone.
+  final bool introSeen;
+
   bool get locked => pinHash != null;
 
   AppSettings copyWith({
@@ -68,6 +72,7 @@ class AppSettings {
     String? Function()? pinHash,
     String? Function()? pinSalt,
     bool? biometric,
+    bool? introSeen,
   }) => AppSettings(
     setupDone: setupDone ?? this.setupDone,
     memberId: memberId ?? this.memberId,
@@ -82,6 +87,7 @@ class AppSettings {
     pinHash: pinHash != null ? pinHash() : this.pinHash,
     pinSalt: pinSalt != null ? pinSalt() : this.pinSalt,
     biometric: biometric ?? this.biometric,
+    introSeen: introSeen ?? this.introSeen,
   );
 
   Map<String, dynamic> toJson() => {
@@ -96,6 +102,7 @@ class AppSettings {
     'codeEmpreinte': pinHash,
     'codeSel': pinSalt,
     'biometrie': biometric,
+    'presentationVue': introSeen,
   };
 
   factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
@@ -110,5 +117,6 @@ class AppSettings {
     pinHash: j['codeEmpreinte'] as String?,
     pinSalt: j['codeSel'] as String?,
     biometric: j['biometrie'] as bool? ?? false,
+    introSeen: j['presentationVue'] as bool? ?? false,
   );
 }

@@ -19,5 +19,5 @@ Future<void> main() async {
     File('${dir.path}/mifbudget.json'),
     HouseholdService(),
   );
-  runApp(MifBudgetApp(controller: controller));
+  runApp(MifBudgetApp(controller: controller, showIntro: true));
 }

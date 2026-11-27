@@ -342,6 +342,15 @@ void main() {
       await tester.drag(find.byType(Scrollable).first, const Offset(0, -420));
       await shot(tester, '1b-accueil-revenus-$suffix');
       await tester.drag(find.byType(Scrollable).first, const Offset(0, 420));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mes comptes'));
+      await shot(tester, '1c-mes-comptes-$suffix');
+      await tester.tapAt(const Offset(195, 40));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Réglages'));
+      await shot(tester, '16-reglages-$suffix');
+      await tester.tap(find.byTooltip('Retour'));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.byTooltip('Ajouter une opération'));
       await tester.pumpAndSettle();
@@ -417,11 +426,27 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Réglages'));
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Opérations récurrentes'),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
       await tester.tap(find.text('Opérations récurrentes').last);
       await shot(tester, '13-recurrences-$suffix');
       await tester.tap(find.byTooltip('Retour'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Catégories et sous-catégories'));
+      if (find.byTooltip('Réglages').hitTestable().evaluate().isNotEmpty) {
+        await tester.tap(find.byTooltip('Réglages'));
+        await tester.pumpAndSettle();
+      }
+      await tester.scrollUntilVisible(
+        find.text('Catégories et sous-catégories'),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tester.drag(find.byType(Scrollable).last, const Offset(0, 250));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Créer, renommer, ranger'));
       await shot(tester, '11-categories-$suffix');
       await tester.tap(find.text('Alimentation'));
       await shot(tester, '12-categorie-$suffix');
@@ -457,4 +482,22 @@ void main() {
       await shot(tester, '15-verrouillage-${dark ? 'nuit' : 'jour'}');
     });
   }
+
+  testWidgets('présentation', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final store = await BudgetStore.open(MemoryRepository());
+    await store.setTheme(ThemeChoice.light);
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: const Key('shot'),
+        child: MifBudgetApp(store: store, showIntro: true),
+      ),
+    );
+    for (var i = 1; i <= 3; i++) {
+      await shot(tester, '17-presentation-$i');
+      if (i < 3) await tester.tap(find.text('Suivant'));
+    }
+  });
 }

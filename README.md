@@ -67,6 +67,13 @@ Application Android de budget familial (Flutter). Voir `CLAUDE.md` pour le cahie
 - Écran de chargement vert profond avec le logo et « MifBudget · Le budget du foyer » (écran de démarrage du système sur Android 12+).
 - Logo dans l'application : écran du code de verrouillage et première ouverture.
 
+**Interface simplifiée** (version 1.0.2)
+- Accueil plus court : ce qui est à confirmer, puis une seule carte pour le mois (argent disponible, entré, dépensé, reste) avec « Mes comptes », les budgets en alerte, l'argent personnel, l'épargne et les dernières opérations. Le détail des revenus est dans Rapports.
+- Opérations : une seule ligne d'information sous chaque opération ; dépense perso signalée par une icône.
+- Épargnes : une phrase par objectif, les calculs dans le détail.
+- Réglages rangés : Mon foyer, Mon budget, Mes comptes, Sécurité, Apparence.
+- Présentation en 3 écrans à la première ouverture (et une fois après la mise à jour), à revoir dans les Réglages.
+
 ### Firebase
 
 - Projet `mifbudget`, configuration Android dans `android/app/google-services.json` (empreintes SHA-1 et SHA-256 de la clé de signature déclarées dans la console).

@@ -154,6 +154,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Réglages'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Code de verrouillage'),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
     await tester.tap(find.text('Code de verrouillage'));
     await tester.pumpAndSettle();
     for (final d in ['1', '9', '8', '4', '1', '9', '8', '4']) {

@@ -5,6 +5,7 @@ import '../models/settings.dart';
 import '../state/budget_store.dart';
 import '../theme.dart';
 import 'categories_screen.dart';
+import 'intro_screen.dart';
 import 'lock.dart';
 import 'personal_money.dart';
 import 'recurrences_screen.dart';
@@ -24,21 +25,18 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
-          const _Header('Vous'),
-          MifCard(
-            padding: EdgeInsets.zero,
-            child: ListTile(
-              leading: const Icon(Icons.person_outline),
-              title: const Text('Prénom'),
-              subtitle: Text(store.settings.memberName),
-              onTap: () => _editName(context, store),
-            ),
-          ),
-          const _Header('Partage et sécurité'),
+          // Mon foyer : qui je suis, le partage, l'argent personnel.
+          const _Header('Mon foyer'),
           MifCard(
             padding: EdgeInsets.zero,
             child: Column(
               children: [
+                ListTile(
+                  leading: const Icon(Icons.person_outline),
+                  title: const Text('Prénom'),
+                  subtitle: Text(store.settings.memberName),
+                  onTap: () => _editName(context, store),
+                ),
                 ListTile(
                   leading: Icon(
                     store.settings.householdId == null
@@ -49,110 +47,56 @@ class SettingsScreen extends StatelessWidget {
                   subtitle: Text(
                     store.settings.householdId == null
                         ? 'Partager le budget avec votre conjoint'
-                        : 'Foyer partagé${store.settings.email == null ? '' : ' · ${store.settings.email}'}',
+                        : 'Foyer partagé avec votre conjoint',
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => SyncScreen.open(context),
                 ),
                 ListTile(
-                  leading: const Icon(Icons.lock_outline),
-                  title: const Text('Code de verrouillage'),
+                  leading: const Icon(Icons.savings_outlined),
+                  title: const Text('Argent personnel'),
                   subtitle: Text(
-                    store.settings.locked
-                        ? 'Activé · demandé à l\'ouverture'
-                        : 'Désactivé',
+                    store.allowance == null
+                        ? 'Désactivé'
+                        : '${formatFcfa(store.allowance!.amount)} le '
+                              '${store.allowance!.dayOfMonth == 1 ? '1er' : store.allowance!.dayOfMonth} '
+                              'de chaque mois',
                   ),
-                  trailing: store.settings.locked
-                      ? TextButton(
-                          onPressed: () => store.updateSettings(
-                            store.settings.copyWith(
-                              pinHash: () => null,
-                              pinSalt: () => null,
-                              biometric: false,
-                            ),
-                          ),
-                          child: const Text('Retirer'),
-                        )
-                      : null,
-                  onTap: () => PinSetupScreen.open(context),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => PersonalMoneySetupScreen.open(context),
                 ),
-                if (store.settings.locked)
-                  FutureBuilder<bool>(
-                    future: biometricAvailable(),
-                    builder: (context, snapshot) => snapshot.data == true
-                        ? SwitchListTile(
-                            secondary: const Icon(Icons.fingerprint),
-                            title: const Text("Déverrouiller avec l'empreinte"),
-                            value: store.settings.biometric,
-                            onChanged: (v) => store.updateSettings(
-                              store.settings.copyWith(biometric: v),
-                            ),
-                          )
-                        : const SizedBox.shrink(),
-                  ),
               ],
             ),
           ),
-          const _Header('Argent personnel'),
+          // Mon budget : catégories et opérations qui reviennent.
+          const _Header('Mon budget'),
           MifCard(
             padding: EdgeInsets.zero,
-            child: ListTile(
-              leading: const Icon(Icons.lock_outline),
-              title: Text(
-                store.settings.personalMoney
-                    ? 'Argent personnel activé'
-                    : "Activer l'argent personnel",
-              ),
-              subtitle: Text(
-                store.allowance == null
-                    ? 'Un montant mensuel pour chacun, dépenses privées'
-                    : '${formatFcfa(store.allowance!.amount)} le '
-                          '${store.allowance!.dayOfMonth == 1 ? '1er' : store.allowance!.dayOfMonth} '
-                          'de chaque mois',
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => PersonalMoneySetupScreen.open(context),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.label_outline),
+                  title: const Text('Catégories et sous-catégories'),
+                  subtitle: const Text('Créer, renommer, ranger'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => CategoriesScreen.open(context),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.repeat),
+                  title: const Text('Opérations récurrentes'),
+                  subtitle: Text(
+                    store.recurrences.isEmpty
+                        ? 'Loyer, salaire, abonnements…'
+                        : '${store.recurrences.length} en cours',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => RecurrencesScreen.open(context),
+                ),
+              ],
             ),
           ),
-          const _Header('Opérations récurrentes'),
-          MifCard(
-            padding: EdgeInsets.zero,
-            child: ListTile(
-              leading: const Icon(Icons.repeat),
-              title: const Text('Opérations récurrentes'),
-              subtitle: Text(
-                store.recurrences.isEmpty
-                    ? 'Loyer, salaire, abonnements…'
-                    : '${store.recurrences.length} en cours',
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => RecurrencesScreen.open(context),
-            ),
-          ),
-          const _Header('Catégories'),
-          MifCard(
-            padding: EdgeInsets.zero,
-            child: ListTile(
-              leading: const Icon(Icons.label_outline),
-              title: const Text('Catégories et sous-catégories'),
-              subtitle: const Text(
-                'Créer, renommer, archiver, changer de groupe',
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => CategoriesScreen.open(context),
-            ),
-          ),
-          const _Header('Apparence'),
-          SegmentedButton<ThemeChoice>(
-            showSelectedIcon: false,
-            segments: [
-              for (final t in ThemeChoice.values)
-                ButtonSegment(value: t, label: Text(t.label)),
-            ],
-            selected: {store.settings.theme},
-            onSelectionChanged: (s) => store.setTheme(s.first),
-          ),
-          const _Header('Portefeuilles'),
+          // Mes comptes : les portefeuilles et leur solde.
+          const _Header('Mes comptes'),
           MifCard(
             padding: EdgeInsets.zero,
             child: Column(
@@ -195,10 +139,71 @@ class SettingsScreen extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 24),
-          Text(
-            "Les données sont enregistrées sur ce téléphone. Le partage avec le conjoint arrivera avec la synchronisation (Firebase).",
-            style: TextStyle(fontSize: 13, color: mif.textSecondary),
+          // Sécurité : le code et l'empreinte.
+          const _Header('Sécurité'),
+          MifCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.lock_outline),
+                  title: const Text('Code de verrouillage'),
+                  subtitle: Text(
+                    store.settings.locked
+                        ? 'Activé · demandé à l\'ouverture'
+                        : 'Désactivé',
+                  ),
+                  trailing: store.settings.locked
+                      ? TextButton(
+                          onPressed: () => store.updateSettings(
+                            store.settings.copyWith(
+                              pinHash: () => null,
+                              pinSalt: () => null,
+                              biometric: false,
+                            ),
+                          ),
+                          child: const Text('Retirer'),
+                        )
+                      : null,
+                  onTap: () => PinSetupScreen.open(context),
+                ),
+                if (store.settings.locked)
+                  FutureBuilder<bool>(
+                    future: biometricAvailable(),
+                    builder: (context, snapshot) => snapshot.data == true
+                        ? SwitchListTile(
+                            secondary: const Icon(Icons.fingerprint),
+                            title: const Text("Déverrouiller avec l'empreinte"),
+                            value: store.settings.biometric,
+                            onChanged: (v) => store.updateSettings(
+                              store.settings.copyWith(biometric: v),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+              ],
+            ),
+          ),
+          const _Header('Apparence'),
+          SegmentedButton<ThemeChoice>(
+            showSelectedIcon: false,
+            segments: [
+              for (final t in ThemeChoice.values)
+                ButtonSegment(value: t, label: Text(t.label)),
+            ],
+            selected: {store.settings.theme},
+            onSelectionChanged: (s) => store.setTheme(s.first),
+          ),
+          const SizedBox(height: 16),
+          MifCard(
+            padding: EdgeInsets.zero,
+            child: ListTile(
+              leading: const Icon(Icons.help_outline),
+              title: const Text("Présentation de l'application"),
+              subtitle: const Text('Revoir les 3 écrans du début'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => IntroScreen.open(context),
+            ),
           ),
         ],
       ),

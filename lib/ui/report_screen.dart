@@ -9,7 +9,7 @@ import 'home_shell.dart';
 import 'widgets/charts.dart';
 import 'widgets/common.dart';
 import 'trends_view.dart';
-import 'widgets/income_card.dart';
+import 'widgets/spent_gauge.dart';
 
 /// Bilan d'un mois : revenus par source, comparaison avec les dépenses et
 /// avec les mois précédents.

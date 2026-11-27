@@ -239,32 +239,23 @@ class OperationTile extends StatelessWidget {
     final mif = context.mif;
     final op = operation;
     final isTransfer = op.type == OperationType.transfer;
+    // Une seule ligne sous le titre : qui (si c'est l'autre), avec quel
+    // compte, et quand (dans les listes sans en-tête de jour).
     final parts = <String>[];
-    // Saisie par l'autre membre du foyer : son prénom d'abord.
     final author = store.memberName(op.authorId);
     if (author != null) parts.add(author);
-    final cat = store.category(op.categoryId);
-    if (cat != null && cat.isSub) {
-      final parent = store.category(cat.parentId);
-      if (parent != null) parts.add(parent.name);
-    }
     final direction = store.savingsDirection(op);
     final savings = direction != 0 || op.type.isSavings;
-    if (direction != 0) parts.add(direction > 0 ? 'Mis de côté' : 'Retiré');
-    if (op.type.isSavings) {
+    String walletName(String? id) =>
+        store.wallet(id)?.name ?? 'Portefeuille personnel';
+    if (savings) {
+      final out = direction < 0 || op.type == OperationType.savingsWithdrawal;
+      parts.add(out ? 'Retiré' : 'Mis de côté');
+    } else if (isTransfer ||
+        (op.type == OperationType.expense && op.targetWalletId != null)) {
+      // Transfert, ou versement d'argent personnel vers un portefeuille.
       parts.add(
-        op.type == OperationType.savingsDeposit ? 'Mis de côté' : 'Retiré',
-      );
-      final w = store.wallet(op.sourceWalletId ?? op.targetWalletId);
-      if (w != null) parts.add(w.name);
-    } else if (isTransfer) {
-      parts.add(
-        '${store.wallet(op.sourceWalletId)?.name ?? 'Portefeuille personnel'} → ${store.wallet(op.targetWalletId)?.name ?? 'Portefeuille personnel'}',
-      );
-    } else if (op.type == OperationType.expense && op.targetWalletId != null) {
-      // Dépense qui alimente un portefeuille (versement d'argent personnel).
-      parts.add(
-        '${store.wallet(op.sourceWalletId)?.name ?? 'Portefeuille personnel'} → ${store.wallet(op.targetWalletId)?.name ?? 'Portefeuille personnel'}',
+        '${walletName(op.sourceWalletId)} → ${walletName(op.targetWalletId)}',
       );
     } else {
       final w = store.wallet(
@@ -272,11 +263,7 @@ class OperationTile extends StatelessWidget {
       );
       if (w != null) parts.add(w.name);
     }
-    if (op.personal) {
-      parts.add(op.visibleToPartner ? 'perso, visible' : 'perso, privée');
-    }
     if (showDate) parts.add(dayLabel(op.date, now: store.now()).toLowerCase());
-    if (op.note.isNotEmpty) parts.add(op.note);
 
     // Transferts et épargne ne sont ni des revenus ni des dépenses.
     final neutral = isTransfer || savings;
@@ -329,6 +316,17 @@ class OperationTile extends StatelessWidget {
                 ],
               ),
             ),
+            if (op.personal) ...[
+              const SizedBox(width: 8),
+              Icon(
+                op.visibleToPartner ? Icons.person_outline : Icons.lock_outline,
+                size: 16,
+                semanticLabel: op.visibleToPartner
+                    ? 'Dépense perso, visible'
+                    : 'Dépense perso, privée',
+                color: mif.textSecondary,
+              ),
+            ],
             const SizedBox(width: 12),
             Text(
               amountText,
