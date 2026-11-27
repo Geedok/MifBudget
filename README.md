@@ -54,7 +54,22 @@ Application Android de budget familial (Flutter). Voir `CLAUDE.md` pour le cahie
 - « Mon argent personnel » (Accueil), visible par soi seul : reste, reçu et dépensé du mois, détail par portefeuille, par catégorie, mois par mois, dépenses privées ou visibles.
 - Plus tard : interrupteur « Avance sur mon argent personnel » (voir CLAUDE.md).
 
-Suite possible : synchronisation Firebase entre les deux téléphones.
+**Synchronisation entre les deux téléphones** (version 1.0.0)
+- Réglages → Partage du foyer : « Créer le foyer partagé » (connexion Google, les données du téléphone deviennent celles du foyer), puis « Inviter mon conjoint » (code de 8 caractères, valable 7 jours, une seule fois).
+- Sur l'autre téléphone, dès la première ouverture : « Rejoindre le foyer de mon conjoint » avec le code.
+- Fonctionne hors connexion (cache Firestore) : les saisies partent dès que le réseau revient. Prénom de l'auteur affiché sur les opérations de l'autre.
+- Confidentialité côté serveur : portefeuilles privés et dépenses perso privées dans `foyers/{id}/prive/{membre}`, lisibles par leur seul propriétaire (`firestore.rules`).
+- Verrouillage : code à 4 chiffres (et empreinte en option), demandé à l'ouverture et après 5 minutes hors de l'application.
+
+### Firebase
+
+- Projet `mifbudget`, configuration Android dans `android/app/google-services.json` (empreintes SHA-1 et SHA-256 de la clé de signature déclarées dans la console).
+- Règles de sécurité : `firestore.rules`. Après toute modification, les publier (console Firebase → Firestore Database → Règles) et les vérifier :
+
+```bash
+cd tool/firestore-rules-test && npm install && npm test
+```
+
 
 ## Développement
 

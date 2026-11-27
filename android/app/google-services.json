@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "980333322704",
+    "project_id": "mifbudget",
+    "storage_bucket": "mifbudget.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:980333322704:android:ee2f748194d08e568559d5",
+        "android_client_info": {
+          "package_name": "com.mifbudget.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "980333322704-nmg6j7u2s9mi4fku4qhgkrsd4i10hon5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mifbudget.app",
+            "certificate_hash": "f5be2d8d9234919aa5c48389bc00cb8ca2495e87"
+          }
+        },
+        {
+          "client_id": "980333322704-p8aq62ijj79ulh78dbtuklnpvo9v8d8g.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAkqv_O8zQEFKE3OEGsDHR2xOEgkT_3z58"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "980333322704-p8aq62ijj79ulh78dbtuklnpvo9v8d8g.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

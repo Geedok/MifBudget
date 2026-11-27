@@ -1,0 +1,74 @@
+rules_version = '2';
+
+// Règles de sécurité de MifBudget (à publier dans la console Firebase :
+// Firestore Database → Règles). Principe :
+// - seul un membre d'un foyer lit et écrit les données de ce foyer ;
+// - les données privées d'un membre (foyers/{id}/prive/{membre}/…) ne sont
+//   lisibles et modifiables que par lui : le téléphone de l'autre ne les
+//   reçoit jamais ;
+// - on rejoint un foyer seulement avec un code d'invitation valide.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function household(householdId) {
+      return get(/databases/$(database)/documents/foyers/$(householdId));
+    }
+
+    function isMember(householdId) {
+      return signedIn() && request.auth.uid in household(householdId).data.membres;
+    }
+
+    match /foyers/{householdId} {
+      // Création : le créateur est le seul membre.
+      allow create: if signedIn()
+        && request.resource.data.membres == [request.auth.uid];
+
+      allow get: if signedIn() && request.auth.uid in resource.data.membres;
+      allow list: if false;
+
+      // Un membre modifie le foyer sans toucher à la liste des membres.
+      // Un non-membre peut s'y ajouter lui seul, avec un code valide.
+      allow update: if (signedIn()
+          && request.auth.uid in resource.data.membres
+          && request.resource.data.membres == resource.data.membres)
+        || (signedIn()
+          && !(request.auth.uid in resource.data.membres)
+          && request.resource.data.membres == resource.data.membres.concat([request.auth.uid])
+          && request.resource.data.membres.size() <= 4
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['membres', 'noms', 'codeUtilise'])
+          && request.resource.data.noms.diff(resource.data.noms).affectedKeys()
+               .hasOnly([request.auth.uid])
+          && exists(/databases/$(database)/documents/invitations/$(request.resource.data.codeUtilise))
+          && get(/databases/$(database)/documents/invitations/$(request.resource.data.codeUtilise)).data.foyer == householdId
+          && get(/databases/$(database)/documents/invitations/$(request.resource.data.codeUtilise)).data.expire > request.time);
+
+      allow delete: if false;
+
+      // Données communes du foyer.
+      match /{collection}/{docId} {
+        allow read, write: if collection != 'prive' && isMember(householdId);
+      }
+
+      // Données privées d'un membre : lui seul.
+      match /prive/{memberId}/{collection}/{docId} {
+        allow read, write: if isMember(householdId) && request.auth.uid == memberId;
+      }
+    }
+
+    // Codes d'invitation : créés par un membre, lus par qui connaît le
+    // code (pas de liste), supprimés après usage.
+    match /invitations/{code} {
+      allow create: if isMember(request.resource.data.foyer)
+        && request.resource.data.creePar == request.auth.uid;
+      allow get: if signedIn();
+      allow list: if false;
+      allow delete: if isMember(resource.data.foyer);
+      allow update: if false;
+    }
+  }
+}

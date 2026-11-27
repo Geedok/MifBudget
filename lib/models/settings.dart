@@ -20,6 +20,11 @@ class AppSettings {
     this.theme = ThemeChoice.system,
     this.personalMoney = false,
     this.allowanceRecurrenceId,
+    this.householdId,
+    this.email,
+    this.pinHash,
+    this.pinSalt,
+    this.biometric = false,
   });
 
   final bool setupDone;
@@ -35,6 +40,22 @@ class AppSettings {
   /// Récurrence du versement mensuel d'argent personnel.
   final String? allowanceRecurrenceId;
 
+  /// Foyer partagé (synchronisation) ; null tant que les données restent
+  /// sur ce téléphone seulement.
+  final String? householdId;
+
+  /// Compte Google connecté.
+  final String? email;
+
+  /// Code de verrouillage : empreinte SHA-256 du code salé (jamais le code).
+  final String? pinHash;
+  final String? pinSalt;
+
+  /// Déverrouiller aussi avec l'empreinte digitale.
+  final bool biometric;
+
+  bool get locked => pinHash != null;
+
   AppSettings copyWith({
     bool? setupDone,
     String? memberId,
@@ -42,6 +63,11 @@ class AppSettings {
     ThemeChoice? theme,
     bool? personalMoney,
     String? Function()? allowanceRecurrenceId,
+    String? Function()? householdId,
+    String? Function()? email,
+    String? Function()? pinHash,
+    String? Function()? pinSalt,
+    bool? biometric,
   }) => AppSettings(
     setupDone: setupDone ?? this.setupDone,
     memberId: memberId ?? this.memberId,
@@ -51,6 +77,11 @@ class AppSettings {
     allowanceRecurrenceId: allowanceRecurrenceId != null
         ? allowanceRecurrenceId()
         : this.allowanceRecurrenceId,
+    householdId: householdId != null ? householdId() : this.householdId,
+    email: email != null ? email() : this.email,
+    pinHash: pinHash != null ? pinHash() : this.pinHash,
+    pinSalt: pinSalt != null ? pinSalt() : this.pinSalt,
+    biometric: biometric ?? this.biometric,
   );
 
   Map<String, dynamic> toJson() => {
@@ -60,6 +91,11 @@ class AppSettings {
     'theme': theme.code,
     'argentPersonnel': personalMoney,
     'recurrenceArgentPersonnel': allowanceRecurrenceId,
+    'foyer': householdId,
+    'email': email,
+    'codeEmpreinte': pinHash,
+    'codeSel': pinSalt,
+    'biometrie': biometric,
   };
 
   factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
@@ -69,5 +105,10 @@ class AppSettings {
     theme: ThemeChoice.fromCode(j['theme'] as String?),
     personalMoney: j['argentPersonnel'] as bool? ?? false,
     allowanceRecurrenceId: j['recurrenceArgentPersonnel'] as String?,
+    householdId: j['foyer'] as String?,
+    email: j['email'] as String?,
+    pinHash: j['codeEmpreinte'] as String?,
+    pinSalt: j['codeSel'] as String?,
+    biometric: j['biometrie'] as bool? ?? false,
   );
 }

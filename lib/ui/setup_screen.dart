@@ -3,7 +3,10 @@ import 'package:material_ui/material_ui.dart';
 import '../core/format.dart';
 import '../models/wallet.dart';
 import '../state/budget_store.dart';
+import '../sync/app_controller.dart';
+import '../sync/household_service.dart';
 import '../theme.dart';
+import 'sync_screen.dart';
 import 'widgets/amount_field.dart';
 import 'widgets/common.dart';
 
@@ -39,6 +42,29 @@ class _SetupScreenState extends State<SetupScreen> {
       bank: parseAmount(_bank.text) ?? 0,
       mobileMoney: parseAmount(_mobile.text) ?? 0,
     );
+  }
+
+  Future<void> _join() async {
+    final controller = AppScope.maybeOf(context)!;
+    final messenger = ScaffoldMessenger.of(context);
+    final code = await askInvitationCode(context);
+    if (code == null) return;
+    setState(() => _saving = true);
+    try {
+      await controller.joinHousehold(code);
+    } on HouseholdException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Impossible de rejoindre le foyer. Vérifiez la connexion '
+            'internet et réessayez.',
+          ),
+        ),
+      );
+    }
+    if (mounted) setState(() => _saving = false);
   }
 
   @override
@@ -117,6 +143,32 @@ class _SetupScreenState extends State<SetupScreen> {
                 _name.text.trim().isEmpty ? 'Saisir votre prénom' : 'Commencer',
               ),
             ),
+            if (AppScope.maybeOf(context) != null) ...[
+              const SizedBox(height: 28),
+              Text(
+                'Votre conjoint utilise déjà MifBudget ?',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: mif.text,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "Demandez-lui un code d'invitation (Réglages → Partage du "
+                'foyer), puis rejoignez son foyer avec votre compte Google.',
+                style: TextStyle(fontSize: 13, color: mif.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                ),
+                onPressed: _saving ? null : _join,
+                icon: const Icon(Icons.group_add_outlined),
+                label: const Text('Rejoindre le foyer de mon conjoint'),
+              ),
+            ],
           ],
         ),
       ),

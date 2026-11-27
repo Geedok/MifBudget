@@ -626,6 +626,7 @@ void main() {
     final store = await pumpApp(tester);
     await tester.tap(find.byTooltip('Réglages'));
     await tester.pumpAndSettle();
+    await reveal(tester, 'Catégories et sous-catégories');
     await tester.tap(find.text('Catégories et sous-catégories'));
     await tester.pumpAndSettle();
     expect(find.text('Essentiel'), findsOneWidget);

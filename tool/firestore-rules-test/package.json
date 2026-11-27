@@ -1,0 +1,13 @@
+{
+  "name": "mifbudget-firestore-rules-test",
+  "private": true,
+  "description": "Vérifie firestore.rules avec l'émulateur Firestore.",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore --project mifbudget-test --config ../../firebase.json \"node rules.test.mjs\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.0",
+    "firebase": "^11.0.0",
+    "firebase-tools": "^14.0.0"
+  }
+}

@@ -122,6 +122,12 @@ class BudgetStore extends ChangeNotifier {
     final store = BudgetStore._(repo, data, clock ?? DateTime.now);
     if (data.version < 2) await store._migrateToSavingsAccounts();
     await store.processAutomaticRecurrences();
+    // Changements venus de l'autre téléphone : rafraîchir l'affichage et
+    // enregistrer les échéances automatiques éventuellement arrivées.
+    repo.onRemoteChange(() {
+      store.notifyListeners();
+      store.processAutomaticRecurrences();
+    });
     return store;
   }
 
@@ -210,6 +216,21 @@ class BudgetStore extends ChangeNotifier {
   // ---------------------------------------------------------------- Lecture
 
   AppSettings get settings => _data.settings;
+
+  BudgetRepository get repository => _repo;
+
+  /// Prénom d'un membre du foyer (null si inconnu ou si c'est moi).
+  String? memberName(String? id) =>
+      id == null || id == settings.memberId ? null : _data.memberNames[id];
+
+  /// Toutes les données (pour les copier vers le foyer partagé).
+  BudgetData get data => _data;
+
+  Future<void> updateSettings(AppSettings s) async {
+    _data.settings = s;
+    notifyListeners();
+    await _repo.saveSettings(s);
+  }
 
   /// Portefeuilles actifs : les courants d'abord, puis l'épargne.
   List<Wallet> get wallets =>
@@ -606,12 +627,19 @@ class BudgetStore extends ChangeNotifier {
         o.date.month == month.month,
   );
 
+  /// Une récurrence qui touche un portefeuille absent de ce téléphone (le
+  /// portefeuille privé de l'autre membre) ne regarde que son propriétaire.
+  bool _concernsMe(Recurrence r) => [
+    r.sourceWalletId,
+    r.targetWalletId,
+  ].whereType<String>().every((id) => wallet(id) != null);
+
   /// Échéances passées ou du jour, pas encore traitées.
   List<Occurrence> dueOccurrences() {
     final today = dateOnly(now());
     final result = <Occurrence>[];
     for (final r in _data.recurrences) {
-      if (!r.active) continue;
+      if (!r.active || !_concernsMe(r)) continue;
       var m = DateTime(r.startMonth.year, r.startMonth.month);
       while (!r.dateIn(m).isAfter(today)) {
         if (r.covers(m) && !isHandled(r, m)) result.add(Occurrence(r, m));
@@ -631,7 +659,7 @@ class BudgetStore extends ChangeNotifier {
     final limit = today.add(Duration(days: days));
     final result = <Occurrence>[];
     for (final r in _data.recurrences) {
-      if (!r.active) continue;
+      if (!r.active || !_concernsMe(r)) continue;
       for (var i = 0; i <= 2; i++) {
         final m = DateTime(today.year, today.month + i);
         final d = r.dateIn(m);

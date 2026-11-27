@@ -240,6 +240,9 @@ class OperationTile extends StatelessWidget {
     final op = operation;
     final isTransfer = op.type == OperationType.transfer;
     final parts = <String>[];
+    // Saisie par l'autre membre du foyer : son prénom d'abord.
+    final author = store.memberName(op.authorId);
+    if (author != null) parts.add(author);
     final cat = store.category(op.categoryId);
     if (cat != null && cat.isSub) {
       final parent = store.category(cat.parentId);
@@ -256,12 +259,12 @@ class OperationTile extends StatelessWidget {
       if (w != null) parts.add(w.name);
     } else if (isTransfer) {
       parts.add(
-        '${store.wallet(op.sourceWalletId)?.name ?? '?'} → ${store.wallet(op.targetWalletId)?.name ?? '?'}',
+        '${store.wallet(op.sourceWalletId)?.name ?? 'Portefeuille personnel'} → ${store.wallet(op.targetWalletId)?.name ?? 'Portefeuille personnel'}',
       );
     } else if (op.type == OperationType.expense && op.targetWalletId != null) {
       // Dépense qui alimente un portefeuille (versement d'argent personnel).
       parts.add(
-        '${store.wallet(op.sourceWalletId)?.name ?? '?'} → ${store.wallet(op.targetWalletId)?.name ?? '?'}',
+        '${store.wallet(op.sourceWalletId)?.name ?? 'Portefeuille personnel'} → ${store.wallet(op.targetWalletId)?.name ?? 'Portefeuille personnel'}',
       );
     } else {
       final w = store.wallet(

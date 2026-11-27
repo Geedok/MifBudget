@@ -32,6 +32,10 @@ class BudgetData {
 
   /// Version du format lue dans le fichier (pour les reprises de données).
   int version;
+
+  /// Prénoms des membres du foyer, par identifiant (synchronisation ;
+  /// non enregistré localement).
+  final Map<String, String> memberNames = {};
   AppSettings settings;
   final List<Wallet> wallets;
   final List<Category> categories;
@@ -80,6 +84,13 @@ class BudgetData {
 /// Cloud Firestore (un document par élément) à la place du stockage local.
 abstract class BudgetRepository {
   Future<BudgetData> load();
+
+  /// Appelé quand les données changent ailleurs (l'autre téléphone). Le
+  /// stockage local ne change jamais tout seul.
+  void onRemoteChange(void Function() callback) {}
+
+  /// Arrête l'écoute des changements (changement de stockage).
+  Future<void> close() async {}
   Future<void> saveSettings(AppSettings settings);
   Future<void> upsertWallets(List<Wallet> wallets);
   Future<void> upsertCategories(List<Category> categories);
@@ -95,7 +106,7 @@ abstract class BudgetRepository {
 }
 
 /// Stockage en mémoire, pour les tests.
-class MemoryRepository implements BudgetRepository {
+class MemoryRepository extends BudgetRepository {
   MemoryRepository([BudgetData? initial]) : data = initial ?? BudgetData();
 
   final BudgetData data;

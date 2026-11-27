@@ -1,18 +1,23 @@
 import 'dart:io';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app.dart';
-import 'data/repository.dart';
-import 'state/budget_store.dart';
+import 'sync/app_controller.dart';
+import 'sync/household_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('fr_FR');
+  // Configuration lue dans android/app/google-services.json.
+  await Firebase.initializeApp();
   final dir = await getApplicationDocumentsDirectory();
-  final repo = LocalJsonRepository(File('${dir.path}/mifbudget.json'));
-  final store = await BudgetStore.open(repo);
-  runApp(MifBudgetApp(store: store));
+  final controller = await AppController.open(
+    File('${dir.path}/mifbudget.json'),
+    HouseholdService(),
+  );
+  runApp(MifBudgetApp(controller: controller));
 }

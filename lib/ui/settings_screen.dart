@@ -5,8 +5,10 @@ import '../models/settings.dart';
 import '../state/budget_store.dart';
 import '../theme.dart';
 import 'categories_screen.dart';
+import 'lock.dart';
 import 'personal_money.dart';
 import 'recurrences_screen.dart';
+import 'sync_screen.dart';
 import 'wallet_form_screen.dart';
 import 'widgets/common.dart';
 
@@ -30,6 +32,65 @@ class SettingsScreen extends StatelessWidget {
               title: const Text('Prénom'),
               subtitle: Text(store.settings.memberName),
               onTap: () => _editName(context, store),
+            ),
+          ),
+          const _Header('Partage et sécurité'),
+          MifCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: Icon(
+                    store.settings.householdId == null
+                        ? Icons.cloud_upload_outlined
+                        : Icons.cloud_done_outlined,
+                  ),
+                  title: const Text('Partage du foyer'),
+                  subtitle: Text(
+                    store.settings.householdId == null
+                        ? 'Partager le budget avec votre conjoint'
+                        : 'Foyer partagé${store.settings.email == null ? '' : ' · ${store.settings.email}'}',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => SyncScreen.open(context),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.lock_outline),
+                  title: const Text('Code de verrouillage'),
+                  subtitle: Text(
+                    store.settings.locked
+                        ? 'Activé · demandé à l\'ouverture'
+                        : 'Désactivé',
+                  ),
+                  trailing: store.settings.locked
+                      ? TextButton(
+                          onPressed: () => store.updateSettings(
+                            store.settings.copyWith(
+                              pinHash: () => null,
+                              pinSalt: () => null,
+                              biometric: false,
+                            ),
+                          ),
+                          child: const Text('Retirer'),
+                        )
+                      : null,
+                  onTap: () => PinSetupScreen.open(context),
+                ),
+                if (store.settings.locked)
+                  FutureBuilder<bool>(
+                    future: biometricAvailable(),
+                    builder: (context, snapshot) => snapshot.data == true
+                        ? SwitchListTile(
+                            secondary: const Icon(Icons.fingerprint),
+                            title: const Text("Déverrouiller avec l'empreinte"),
+                            value: store.settings.biometric,
+                            onChanged: (v) => store.updateSettings(
+                              store.settings.copyWith(biometric: v),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+              ],
             ),
           ),
           const _Header('Argent personnel'),
