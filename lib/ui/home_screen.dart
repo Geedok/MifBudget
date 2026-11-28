@@ -330,14 +330,14 @@ class _WalletsSheet extends StatelessWidget {
               ),
             ),
           ),
-          header('Argent de tous les jours', sum(current)),
+          header('Comptes courants du foyer', sum(current)),
           for (final w in current) tile(w),
           if (savings.isNotEmpty) ...[
-            header('Épargne', sum(savings)),
+            header('Épargne du foyer', sum(savings)),
             for (final w in savings) tile(w),
           ],
           if (personal.isNotEmpty) ...[
-            header('Mon argent personnel', sum(personal)),
+            header('Mon argent personnel (privé)', sum(personal)),
             for (final w in personal) tile(w),
           ],
           const SizedBox(height: 8),

@@ -263,7 +263,7 @@ void main() {
     await pumpApp(tester);
     await tester.tap(find.text('Mes comptes'));
     await tester.pumpAndSettle();
-    expect(find.text('Argent de tous les jours'), findsOneWidget);
+    expect(find.text('Comptes courants du foyer'), findsOneWidget);
     expect(find.text('Banque'), findsOneWidget);
     expect(find.text('Ajouter un portefeuille'), findsOneWidget);
   });
