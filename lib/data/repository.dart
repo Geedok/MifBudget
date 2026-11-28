@@ -104,6 +104,9 @@ abstract class BudgetRepository {
   /// une échéance confirmée ou ignorée ; sinon, suppression douce).
   Future<void> removeOperation(String id);
 
+  /// Suppression définitive d'un portefeuille qui n'a jamais servi.
+  Future<void> removeWallet(String id);
+
   /// Range chaque document là où il doit être (commun au foyer ou privé)
   /// après un changement des règles de confidentialité. Rien à faire pour
   /// un stockage sur le téléphone.
@@ -182,6 +185,12 @@ class MemoryRepository extends BudgetRepository {
   Future<void> removeOperation(String id) async {
     _touch();
     data.operations.removeWhere((o) => o.id == id);
+  }
+
+  @override
+  Future<void> removeWallet(String id) async {
+    _touch();
+    data.wallets.removeWhere((w) => w.id == id);
   }
 }
 
@@ -300,6 +309,12 @@ class LocalJsonRepository extends MemoryRepository {
   @override
   Future<void> removeOperation(String id) async {
     await super.removeOperation(id);
+    await _write();
+  }
+
+  @override
+  Future<void> removeWallet(String id) async {
+    await super.removeWallet(id);
     await _write();
   }
 }

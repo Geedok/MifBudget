@@ -94,18 +94,30 @@ class _WalletFormScreenState extends State<WalletFormScreen> {
     if (mounted) Navigator.of(context).pop(result);
   }
 
-  Future<void> _archive() async {
+  /// Supprimer : pour de bon s'il n'a jamais servi, sinon archivé.
+  Future<void> _remove() async {
     final store = StoreScope.read(context);
     final w = widget.existing!;
+    final unused = store.walletUnused(w.id);
     final balance = store.walletBalance(w.id);
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Archiver « ${w.name} » ?'),
+        title: Text(
+          unused ? 'Supprimer « ${w.name} » ?' : 'Retirer « ${w.name} » ?',
+        ),
         content: Text(
-          balance != 0
-              ? "Son solde est de ${formatFcfa(balance)} : il ne sera plus compté. Videz-le d'abord par un transfert si l'argent est ailleurs. L'historique est conservé."
-              : "Il disparaîtra des listes. L'historique est conservé.",
+          unused
+              ? "Il n'a jamais servi : il sera supprimé définitivement."
+              : [
+                  "Il a déjà servi : il sera archivé (retiré des listes, son "
+                      "historique est gardé). Vous pourrez le remettre en "
+                      "service dans Réglages → Portefeuilles archivés.",
+                  if (balance != 0)
+                    "Son solde de ${formatFcfa(balance)} ne sera plus compté : "
+                        "videz-le d'abord par un transfert si l'argent est "
+                        "ailleurs.",
+                ].join('\n\n'),
         ),
         actions: [
           TextButton(
@@ -114,15 +126,14 @@ class _WalletFormScreenState extends State<WalletFormScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Archiver'),
+            child: Text(unused ? 'Supprimer' : 'Archiver'),
           ),
         ],
       ),
     );
     if (ok != true) return;
-    final archived = w.copyWith(archived: true);
-    await store.updateWallet(archived);
-    if (mounted) Navigator.of(context).pop(archived);
+    await store.removeWallet(w.id);
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -145,14 +156,6 @@ class _WalletFormScreenState extends State<WalletFormScreen> {
         title: Text(
           _editing ? 'Modifier le portefeuille' : 'Nouveau portefeuille',
         ),
-        actions: [
-          if (_editing)
-            IconButton(
-              icon: const Icon(Icons.archive_outlined),
-              tooltip: 'Archiver',
-              onPressed: _archive,
-            ),
-        ],
       ),
       body: SafeArea(
         top: false,
@@ -265,8 +268,73 @@ class _WalletFormScreenState extends State<WalletFormScreen> {
                 ),
               ),
             ),
+            if (_editing) ...[
+              const SizedBox(height: 12),
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: mif.statusOver,
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                onPressed: _remove,
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('Supprimer ce portefeuille'),
+              ),
+            ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Réglages → Portefeuilles archivés : les remettre en service.
+class ArchivedWalletsScreen extends StatelessWidget {
+  const ArchivedWalletsScreen({super.key});
+
+  static Future<void> open(BuildContext context) => Navigator.of(context)
+      .push(MaterialPageRoute(builder: (_) => const ArchivedWalletsScreen()));
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final mif = context.mif;
+    final archived = store.archivedWallets;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Portefeuilles archivés')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        children: [
+          Text(
+            'Retirés des listes, avec leur historique. Remettez-en un en '
+            'service pour le réutiliser.',
+            style: TextStyle(fontSize: 13, color: mif.textSecondary),
+          ),
+          const SizedBox(height: 12),
+          if (archived.isEmpty)
+            Text(
+              'Aucun portefeuille archivé.',
+              style: TextStyle(fontSize: 14, color: mif.textSecondary),
+            )
+          else
+            MifCard(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  for (final w in archived)
+                    ListTile(
+                      leading: Icon(walletIcon(w.type)),
+                      title: Text(w.name),
+                      subtitle: Text(walletDescription(w)),
+                      trailing: TextButton(
+                        onPressed: () =>
+                            store.updateWallet(w.copyWith(archived: false)),
+                        child: const Text('Remettre'),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

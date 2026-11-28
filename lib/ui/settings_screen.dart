@@ -136,6 +136,16 @@ class SettingsScreen extends StatelessWidget {
                   ),
                   onTap: () => WalletFormScreen.open(context),
                 ),
+                if (store.archivedWallets.isNotEmpty)
+                  ListTile(
+                    leading: const Icon(Icons.archive_outlined),
+                    title: Text(
+                      'Portefeuilles archivés '
+                      '(${store.archivedWallets.length})',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => ArchivedWalletsScreen.open(context),
+                  ),
               ],
             ),
           ),

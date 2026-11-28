@@ -79,6 +79,10 @@ Application Android de budget familial (Flutter). Voir `CLAUDE.md` pour le cahie
 - Saisie avec un portefeuille personnel : « Pour : moi » (privée, hors foyer) ou « le foyer » (visible, comptée). Un revenu reçu sur un portefeuille personnel reste personnel.
 - Reprise automatique : les portefeuilles personnels visibles deviennent privés, l'épargne personnelle devient une épargne du foyer.
 
+**Supprimer un portefeuille** (version 1.0.5)
+- « Supprimer ce portefeuille » en bas de sa fiche : supprimé pour de bon s'il n'a jamais servi, archivé sinon (historique gardé).
+- Réglages → Portefeuilles archivés : les remettre en service.
+
 ### Firebase
 
 - Projet `mifbudget`, configuration Android dans `android/app/google-services.json` (empreintes SHA-1 et SHA-256 de la clé de signature déclarées dans la console).

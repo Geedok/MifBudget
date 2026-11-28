@@ -464,6 +464,27 @@ void main() {
     expect(find.text('Mobile Money · Argent personnel'), findsOneWidget);
   });
 
+  testWidgets('supprimer un portefeuille inutilisé depuis sa fiche', (
+    tester,
+  ) async {
+    final store = await pumpApp(tester);
+    final bia = await store.addWallet(name: 'BIA', type: WalletType.bank);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mes comptes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('BIA'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Supprimer ce portefeuille'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Supprimer ce portefeuille'));
+    await tester.pumpAndSettle();
+    expect(find.text('Supprimer « BIA » ?'), findsOneWidget);
+    await tester.tap(find.text('Supprimer'));
+    await tester.pumpAndSettle();
+    expect(store.wallet(bia.id), isNull);
+    expect(find.text('BIA'), findsNothing);
+  });
+
   testWidgets('tendances, projection et simulateur', (tester) async {
     final store = await pumpApp(tester);
     final compte = await store.addWallet(

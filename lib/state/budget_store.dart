@@ -1531,6 +1531,39 @@ class BudgetStore extends ChangeNotifier {
     await _repo.upsertCategories(changed);
   }
 
+  /// Portefeuilles archivés (à remettre en service depuis les Réglages).
+  List<Wallet> get archivedWallets =>
+      _data.wallets.where((w) => w.archived).toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
+
+  /// Un portefeuille qui n'a jamais servi (aucune opération, même
+  /// supprimée, aucun objectif, aucune récurrence) peut être supprimé pour
+  /// de bon ; sinon on l'archive pour ne pas fausser l'historique.
+  bool walletUnused(String id) =>
+      !_data.operations.any(
+        (o) => o.sourceWalletId == id || o.targetWalletId == id,
+      ) &&
+      !_data.goals.any((g) => g.walletId == id) &&
+      !_data.recurrences.any(
+        (r) => r.sourceWalletId == id || r.targetWalletId == id,
+      ) &&
+      (wallet(id)?.openingBalance ?? 0) == 0;
+
+  /// Supprime un portefeuille inutilisé, ou l'archive s'il a déjà servi.
+  /// Rend true s'il a été supprimé pour de bon.
+  Future<bool> removeWallet(String id) async {
+    final w = wallet(id);
+    if (w == null) return false;
+    if (!walletUnused(id)) {
+      await updateWallet(w.copyWith(archived: true));
+      return false;
+    }
+    _data.wallets.removeWhere((x) => x.id == id);
+    notifyListeners();
+    await _repo.removeWallet(id);
+    return true;
+  }
+
   Future<void> updateWallet(Wallet wallet) async {
     final updated = wallet.copyWith(updatedAt: now());
     final i = _data.wallets.indexWhere((w) => w.id == wallet.id);

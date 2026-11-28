@@ -280,6 +280,39 @@ void main() {
     expect(early[1].spentRatio, 0);
   });
 
+  test('supprimer un portefeuille : pour de bon s\'il n\'a jamais servi, '
+      'archivé sinon', () async {
+    final dir = await Directory.systemTemp.createTemp('mifbudget');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/mifbudget.json');
+    final store = await newStore(LocalJsonRepository(file));
+    final bia = await store.addWallet(name: 'BIA', type: WalletType.bank);
+    expect(store.walletUnused(bia.id), isTrue);
+    expect(await store.removeWallet(bia.id), isTrue);
+    expect(store.wallet(bia.id), isNull);
+
+    // Déjà utilisé (solde de départ, opération) : archivé, historique gardé.
+    final momo = DefaultIds.walletMobileMoney;
+    expect(store.walletUnused(momo), isFalse);
+    expect(await store.removeWallet(momo), isFalse);
+    expect(store.wallets.map((w) => w.id), isNot(contains(momo)));
+    expect(store.archivedWallets.map((w) => w.id), [momo]);
+
+    // Remis en service.
+    await store.updateWallet(
+      store.archivedWallets.single.copyWith(archived: false),
+    );
+    expect(store.wallets.map((w) => w.id), contains(momo));
+
+    // Enregistré dans le fichier.
+    final reopened = await BudgetStore.open(
+      LocalJsonRepository(file),
+      clock: now,
+    );
+    expect(reopened.wallet(bia.id), isNull);
+    expect(reopened.wallet(momo)!.archived, isFalse);
+  });
+
   group('épargnes', () {
     test('versement mensuel nécessaire pour tenir la date cible', () async {
       final store = await newStore();

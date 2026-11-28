@@ -279,6 +279,15 @@ class FirestoreRepository extends BudgetRepository {
   }
 
   @override
+  Future<void> removeWallet(String id) async {
+    _sharedWallets.remove(id);
+    _privateWallets.remove(id);
+    _delete(_shared(Paths.wallets).doc(id));
+    _delete(_private(Paths.wallets).doc(id));
+    _rebuild();
+  }
+
+  @override
   Future<void> reconcilePrivacy() async {
     // Mes portefeuilles personnels vont dans ma partie privée ; ceux du
     // foyer dans la partie commune.
